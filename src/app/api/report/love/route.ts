@@ -54,7 +54,8 @@ export async function GET(request: NextRequest) {
     // 地点 TOP3
     const locMap = new Map<string, { id: string; name: string; count: number }>();
     for (const r of periodRecords) {
-      const loc = r.locations as { id: string; name: string } | null;
+      const raw = r.locations;
+      const loc = (Array.isArray(raw) ? raw[0] : raw) as { id: string; name: string } | null | undefined;
       if (!loc?.id) continue;
       const existing = locMap.get(loc.id);
       if (existing) existing.count += 1;

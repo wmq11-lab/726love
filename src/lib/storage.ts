@@ -62,7 +62,12 @@ export async function generateImageUrl(
   if (!client || !bucketName) return null;
 
   try {
-    return await getSignedUrl(
+    const sign = getSignedUrl as (
+      c: unknown,
+      cmd: unknown,
+      opts: { expiresIn: number },
+    ) => Promise<string>;
+    return await sign(
       client,
       new GetObjectCommand({ Bucket: bucketName, Key: key }),
       { expiresIn: expireTime },

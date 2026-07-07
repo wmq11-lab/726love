@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { PawPrints, TinyHeart } from './puppy-decoration';
 import { RecordCard } from './record-card';
 import { RecordEditDialog } from './record-edit-dialog';
-import { OnThisDaySection } from './on-this-day-section';
+import { OnThisDaySection, type OnThisDayRecord } from './on-this-day-section';
 import { LoveReportSection } from './love-report-section';
 import { LoveMilestones } from './love-milestones';
 
@@ -60,11 +60,15 @@ export function HomeTab() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleOnThisDayEdit = (record: LoveRecord) => {
+  const handleOnThisDayEdit = (record: OnThisDayRecord) => {
     const full = recentRecords.find((r) => r.id === record.id);
     setEditingRecord(full ?? {
-      ...record,
+      id: record.id,
       title: record.content?.slice(0, 20) || '无题',
+      content: record.content,
+      mood_tag: record.mood_tag,
+      role: record.role,
+      record_date: record.record_date,
       tags: [],
     });
   };

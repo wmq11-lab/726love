@@ -5,7 +5,7 @@ import { PuppyDecoration } from './puppy-decoration';
 import { getMoodEmoji } from '@/lib/moods';
 import { RoleAvatar } from './role-avatar';
 
-interface OnThisDayRecord {
+export interface OnThisDayRecord {
   id: string;
   content: string;
   mood_tag: string;
