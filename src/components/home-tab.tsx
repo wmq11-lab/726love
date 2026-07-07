@@ -73,6 +73,24 @@ export function HomeTab() {
     });
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定要删除这条记忆吗？删除后无法恢复。')) return;
+
+    try {
+      const res = await fetch(`/api/records/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!json.success) {
+        alert('删除失败: ' + json.error);
+        return;
+      }
+      setRecentRecords((prev) => prev.filter((r) => r.id !== id));
+      setStats((prev) => ({ ...prev, records: Math.max(0, prev.records - 1) }));
+      if (editingRecord?.id === id) setEditingRecord(null);
+    } catch {
+      alert('删除失败，请稍后重试');
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
@@ -171,6 +189,7 @@ export function HomeTab() {
                 record={record}
                 showImages={true}
                 onEdit={setEditingRecord}
+                onDelete={handleDelete}
               />
             ))}
           </div>
