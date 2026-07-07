@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { enrichRecordsWithImages, startOfToday, isSameMonthDay, yearsAgoFrom } from '@/lib/record-enrich';

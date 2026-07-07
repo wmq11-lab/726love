@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** GET /api/health — 检查关键环境变量是否已配置（不暴露具体值） */
+/** GET /api/health — 检查环境变量与 Supabase 连通性 */
 export async function GET() {
   const checks = {
     COZE_SUPABASE_URL: Boolean(process.env.COZE_SUPABASE_URL),
@@ -17,16 +18,34 @@ export async function GET() {
     NEXT_PUBLIC_AMAP_KEY: Boolean(process.env.NEXT_PUBLIC_AMAP_KEY),
   };
 
-  const requiredOk =
+  const envOk =
     checks.COZE_SUPABASE_URL &&
     checks.COZE_SUPABASE_ANON_KEY &&
     checks.COZE_SUPABASE_SERVICE_ROLE_KEY;
 
+  let supabaseOk = false;
+  let supabaseError = '';
+
+  if (envOk) {
+    try {
+      const client = getSupabaseClient();
+      const { error } = await client.from('locations').select('id').limit(1);
+      supabaseOk = !error;
+      supabaseError = error?.message || '';
+    } catch (err) {
+      supabaseError = (err as Error).message;
+    }
+  }
+
   return NextResponse.json({
-    success: requiredOk,
+    success: envOk && supabaseOk,
     checks,
-    hint: requiredOk
-      ? 'Supabase 环境变量已配置'
-      : '缺少 Supabase 环境变量，请在 EdgeOne 环境变量中配置并重新部署',
+    supabaseOk,
+    supabaseError: supabaseError || undefined,
+    hint: !envOk
+      ? '缺少 Supabase 环境变量'
+      : !supabaseOk
+        ? `Supabase 连接失败: ${supabaseError}`
+        : '一切正常',
   });
 }

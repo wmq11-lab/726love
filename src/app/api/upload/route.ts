@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getStorage, generateImageUrl, isObjectStorageConfigured } from '@/lib/storage';
 import { MAX_IMAGE_SIZE, MAX_IMAGE_SIZE_MB } from '@/lib/upload';
@@ -42,7 +45,7 @@ async function tryUploadToS3(buffer: Buffer, fileName: string, contentType: stri
   if (!isObjectStorageConfigured()) return null;
 
   try {
-    const storage = getStorage();
+    const storage = await getStorage();
     const uploadPromise = storage.uploadFile({
       fileContent: buffer,
       fileName,

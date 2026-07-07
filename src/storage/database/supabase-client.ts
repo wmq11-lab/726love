@@ -61,9 +61,6 @@ function getSupabaseClient(token?: string): SupabaseClient {
 
   return createClient(url, key, {
     global: globalOptions,
-    db: {
-      timeout: 60000,
-    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
