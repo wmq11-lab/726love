@@ -1,4 +1,5 @@
-/** 延迟加载 AWS SDK，避免 EdgeOne 云函数在模块初始化阶段崩溃 */
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 function getBucketConfig() {
   return {
@@ -16,11 +17,10 @@ function getBucketConfig() {
   };
 }
 
-async function createS3Client() {
+function createS3Client(): S3Client | null {
   const { endpointUrl, accessKey, secretKey, region } = getBucketConfig();
   if (!endpointUrl || !accessKey || !secretKey) return null;
 
-  const { S3Client } = await import('@aws-sdk/client-s3');
   return new S3Client({
     region,
     endpoint: endpointUrl,
@@ -34,12 +34,10 @@ async function createS3Client() {
 /** 创建 S3 兼容对象存储客户端（Cloudflare R2 等） */
 export async function getStorage() {
   const config = getBucketConfig();
-  const client = await createS3Client();
+  const client = createS3Client();
   if (!client || !config.bucketName) {
     throw new Error('对象存储未配置，请设置 COZE_BUCKET_* 环境变量');
   }
-
-  const { PutObjectCommand } = await import('@aws-sdk/client-s3');
 
   return {
     async uploadFile(params: {
@@ -74,14 +72,10 @@ export async function generateImageUrl(
   if (!key || key.startsWith('data:')) return key;
 
   const { bucketName } = getBucketConfig();
-  const client = await createS3Client();
+  const client = createS3Client();
   if (!client || !bucketName) return null;
 
   try {
-    const [{ GetObjectCommand }, { getSignedUrl }] = await Promise.all([
-      import('@aws-sdk/client-s3'),
-      import('@aws-sdk/s3-request-presigner'),
-    ]);
     const sign = getSignedUrl as (
       c: unknown,
       cmd: unknown,
