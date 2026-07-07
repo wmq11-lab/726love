@@ -1,0 +1,228 @@
+@import "https://fonts.googleapis.cn/css2?family=ZCOOL+KuaiLe&family=Noto+Serif+SC:wght@400;500;600;700&display=swap";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* 线条小狗主题色彩 */
+  --color-puppy-brown: var(--puppy-brown);
+  --color-puppy-pink: var(--puppy-pink);
+  --color-puppy-cream: var(--puppy-cream);
+  --color-puppy-honey: var(--puppy-honey);
+  --color-puppy-text: var(--puppy-text);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-sans:
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', ui-sans-serif,
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'ZCOOL KuaiLe', 'PingFang SC', ui-sans-serif, system-ui;
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'SimSun', ui-serif, Georgia;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* 线条小狗主题：温暖奶油色系 */
+  --background: #FEFAF5;
+  --foreground: #4A3728;
+  --card: #FFFFFF;
+  --card-foreground: #4A3728;
+  --popover: #FFFFFF;
+  --popover-foreground: #4A3728;
+  --primary: #C4956A;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F2C9C9;
+  --secondary-foreground: #4A3728;
+  --muted: #FFF8F0;
+  --muted-foreground: #A0846C;
+  --accent: #F5D98E;
+  --accent-foreground: #4A3728;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #E8D5C4;
+  --input: #E8D5C4;
+  --ring: #C4956A;
+
+  /* 主题色 token */
+  --puppy-brown: #C4956A;
+  --puppy-pink: #F2C9C9;
+  --puppy-cream: #FFF8F0;
+  --puppy-honey: #F5D98E;
+  --puppy-text: #4A3728;
+
+  --chart-1: #C4956A;
+  --chart-2: #F2C9C9;
+  --chart-3: #F5D98E;
+  --chart-4: #E8B89D;
+  --chart-5: #D4A574;
+  --sidebar: #FFF8F0;
+  --sidebar-foreground: #4A3728;
+  --sidebar-primary: #C4956A;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F2C9C9;
+  --sidebar-accent-foreground: #4A3728;
+  --sidebar-border: #E8D5C4;
+  --sidebar-ring: #C4956A;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: url('/puppy-bg.png');
+    background-repeat: repeat;
+    background-size: 600px auto;
+    background-attachment: fixed;
+    background-blend-mode: soft-light;
+  }
+}
+
+body {
+  @apply font-sans;
+}
+
+/* 线条小狗主题滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #FFF8F0;
+}
+::-webkit-scrollbar-thumb {
+  background: #C4956A;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B0845A;
+}
+
+/* 手写风格输入框聚焦 */
+input:focus, textarea:focus, select:focus {
+  border-color: #C4956A !important;
+  box-shadow: 0 0 0 3px rgba(196, 149, 106, 0.15) !important;
+}
+
+/* 卡片悬浮效果 */
+.hover-card-effect {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-card-effect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(196, 149, 106, 0.15);
+}
+
+/* 拍立得照片风格 */
+.polaroid-frame {
+  background: #FFFFFF;
+  padding: 12px 12px 40px 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.polaroid-frame img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+/* 页面淡入动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.animate-fade-in-1 { animation-delay: 0ms; }
+.animate-fade-in-2 { animation-delay: 100ms; }
+.animate-fade-in-3 { animation-delay: 200ms; }
+.animate-fade-in-4 { animation-delay: 300ms; }
+
+/* 爪印花纹背景 */
+.paw-pattern-bg {
+  background-image: url('/paw-pattern.png');
+  background-repeat: repeat;
+  background-size: 200px;
+  background-blend-mode: soft-light;
+  background-opacity: 0.05;
+}
+
+/* 英雄横幅 */
+.hero-banner {
+  background-image: url('/hero-puppies.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* 小狗吉祥物图片 */
+.puppy-mascot-img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+/* 高德地图全屏容器 */
+.space-map-root,
+.space-map-root .space-map-container,
+.space-map-container,
+.space-map-container .amap-container,
+.space-map-container .amap-maps {
+  width: 100% !important;
+  height: 100% !important;
+}
