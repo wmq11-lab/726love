@@ -3,6 +3,9 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { generateImageUrl } from '@/lib/storage';
 import { logger } from '@/lib/logger';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 /** GET /api/space/markers — 地图标记：按地点聚合带图片的记忆 */
 export async function GET() {
   try {

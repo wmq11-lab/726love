@@ -1,6 +1,5 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { S3Storage } from 'coze-coding-dev-sdk';
 
 function getBucketConfig() {
   return {
@@ -32,25 +31,40 @@ function createS3Client(): S3Client | null {
   });
 }
 
-/** 创建 S3 兼容对象存储客户端（扣子平台 / Cloudflare R2 / 阿里云 OSS 等） */
+/** 创建 S3 兼容对象存储客户端（扣子平台 / Cloudflare R2 等） */
 export function getStorage() {
   const config = getBucketConfig();
-  return new S3Storage({
-    endpointUrl: config.endpointUrl,
-    accessKey: config.accessKey,
-    secretKey: config.secretKey,
-    bucketName: config.bucketName,
-    region: config.region,
-  });
+  const client = createS3Client();
+  if (!client || !config.bucketName) {
+    throw new Error('对象存储未配置，请设置 COZE_BUCKET_* 环境变量');
+  }
+
+  return {
+    async uploadFile(params: {
+      fileContent: Buffer | Uint8Array;
+      fileName: string;
+      contentType?: string;
+    }) {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: config.bucketName!,
+          Key: params.fileName,
+          Body: params.fileContent,
+          ContentType: params.contentType,
+        }),
+      );
+      return params.fileName;
+    },
+  };
 }
 
-/** 是否已配置可用的对象存储（Vercel / 自建部署需填写密钥） */
+/** 是否已配置可用的对象存储 */
 export function isObjectStorageConfigured(): boolean {
-  const { endpointUrl, bucketName, accessKey } = getBucketConfig();
-  return Boolean(endpointUrl && bucketName && accessKey);
+  const { endpointUrl, bucketName, accessKey, secretKey } = getBucketConfig();
+  return Boolean(endpointUrl && bucketName && accessKey && secretKey);
 }
 
-/** 生成图片访问签名 URL（兼容 R2，不依赖扣子平台 token） */
+/** 生成图片访问签名 URL（兼容 R2） */
 export async function generateImageUrl(
   key: string,
   expireTime = 86400,
