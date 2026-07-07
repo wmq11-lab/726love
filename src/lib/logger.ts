@@ -1,10 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-
-const LOG_DIR = path.join(process.cwd(), 'logs');
-const IS_DEV = process.env.COZE_PROJECT_ENV !== 'PROD';
-
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+const IS_DEV = process.env.COZE_PROJECT_ENV !== 'PROD';
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,
@@ -17,18 +13,6 @@ function getMinLevel(): LogLevel {
   const envLevel = process.env.LOG_LEVEL as LogLevel | undefined;
   if (envLevel && envLevel in LEVEL_PRIORITY) return envLevel;
   return IS_DEV ? 'debug' : 'info';
-}
-
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
-}
-
-function getLogFile(level: LogLevel): string {
-  const date = new Date().toISOString().slice(0, 10);
-  const prefix = level === 'error' ? 'error' : 'app';
-  return path.join(LOG_DIR, `${prefix}-${date}.log`);
 }
 
 function serializeArg(arg: unknown): string {
@@ -45,28 +29,32 @@ function serializeArg(arg: unknown): string {
   return String(arg);
 }
 
-function formatLine(level: LogLevel, message: string, args: unknown[]): string {
-  const timestamp = new Date().toISOString();
-  const extra = args.length > 0 ? ` ${args.map(serializeArg).join(' ')}` : '';
-  return `[${timestamp}] [${level.toUpperCase()}] ${message}${extra}\n`;
-}
-
 function write(level: LogLevel, message: string, ...args: unknown[]) {
   if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[getMinLevel()]) return;
 
-  ensureLogDir();
-  const line = formatLine(level, message, args);
-
-  try {
-    fs.appendFileSync(getLogFile(level), line, 'utf8');
-  } catch {
-    // 文件写入失败时静默降级到控制台
-  }
-
   const consoleFn =
     level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+
   if (IS_DEV || level === 'error' || level === 'warn') {
     consoleFn(`[${level.toUpperCase()}]`, message, ...args);
+  }
+
+  // 生产环境（EdgeOne/Vercel 等）不写本地文件，避免只读文件系统导致二次崩溃
+  if (!IS_DEV) return;
+
+  try {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const logDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    const prefix = level === 'error' ? 'error' : 'app';
+    const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}${args.length ? ` ${args.map(serializeArg).join(' ')}` : ''}\n`;
+    fs.appendFileSync(path.join(logDir, `${prefix}-${date}.log`), line, 'utf8');
+  } catch {
+    // ignore
   }
 }
 
