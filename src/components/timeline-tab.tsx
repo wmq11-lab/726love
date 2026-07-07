@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react';
 import { RecordCard } from './record-card';
 import { MOOD_LABELS } from '@/lib/moods';
 import { TinyHeart } from './puppy-decoration';
+import { RecordHeatmap } from './record-heatmap';
 
 interface LoveRecord {
   id: string;
   title: string;
   content: string;
   mood_tag: string;
+  role?: string;
   record_date: string;
   tags: string[];
   locations?: { id: string; name: string } | null;
@@ -19,9 +21,12 @@ interface LoveRecord {
 export function TimelineTab() {
   const [records, setRecords] = useState<LoveRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ mood: '', year: '', month: '' });
+  const [filter, setFilter] = useState({ mood: '', year: '', month: '', day: '' });
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+
+  const currentYear = new Date().getFullYear();
+  const heatmapYear = filter.year ? parseInt(filter.year, 10) : currentYear;
 
   const fetchRecords = async (p: number) => {
     setLoading(true);
@@ -30,10 +35,14 @@ export function TimelineTab() {
       params.set('page', String(p));
       params.set('limit', '10');
       if (filter.mood) params.set('mood', filter.mood);
-      if (filter.year) {
+
+      if (filter.day) {
+        params.set('dateFrom', `${filter.day}T00:00:00`);
+        params.set('dateTo', `${filter.day}T23:59:59`);
+      } else if (filter.year) {
         const from = `${filter.year}-${filter.month || '01'}-01`;
         const to = filter.month
-          ? `${filter.year}-${filter.month}-${new Date(parseInt(filter.year), parseInt(filter.month), 0).getDate()}`
+          ? `${filter.year}-${filter.month}-${new Date(parseInt(filter.year, 10), parseInt(filter.month, 10), 0).getDate()}`
           : `${filter.year}-12-31`;
         params.set('dateFrom', from);
         params.set('dateTo', to);
@@ -57,13 +66,30 @@ export function TimelineTab() {
   }, [page, filter]);
 
   const moods = MOOD_LABELS;
-  const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
+
+  const handleHeatmapDay = (date: string) => {
+    const [y] = date.split('-');
+    setFilter((f) => ({
+      ...f,
+      year: y,
+      month: '',
+      day: f.day === date ? '' : date,
+    }));
+    setPage(1);
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* 日历热力图 */}
+      <RecordHeatmap
+        year={heatmapYear}
+        selectedDate={filter.day}
+        onSelectDate={handleHeatmapDay}
+      />
+
       {/* 筛选器 */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <select
           value={filter.mood}
           onChange={(e) => { setFilter((f) => ({ ...f, mood: e.target.value })); setPage(1); }}
@@ -77,7 +103,10 @@ export function TimelineTab() {
         </select>
         <select
           value={filter.year}
-          onChange={(e) => { setFilter((f) => ({ ...f, year: e.target.value })); setPage(1); }}
+          onChange={(e) => {
+            setFilter((f) => ({ ...f, year: e.target.value, month: '', day: '' }));
+            setPage(1);
+          }}
           className="px-3 py-1.5 rounded-xl text-xs outline-none"
           style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5C4', color: '#4A3728' }}
         >
@@ -86,6 +115,16 @@ export function TimelineTab() {
             <option key={y} value={y}>{y}年</option>
           ))}
         </select>
+        {filter.day && (
+          <button
+            type="button"
+            onClick={() => setFilter((f) => ({ ...f, day: '' }))}
+            className="px-3 py-1.5 rounded-xl text-xs"
+            style={{ backgroundColor: '#C4956A', color: '#FFFFFF' }}
+          >
+            已选 {filter.day} ✕
+          </button>
+        )}
       </div>
 
       {/* 时间线 */}
@@ -102,7 +141,6 @@ export function TimelineTab() {
         </div>
       ) : (
         <div className="relative">
-          {/* 时间线竖线 */}
           <div
             className="absolute left-4 top-0 bottom-0 w-0.5"
             style={{ backgroundColor: '#F2C9C9' }}
@@ -110,7 +148,6 @@ export function TimelineTab() {
           <div className="space-y-4">
             {records.map((record, idx) => (
               <div key={record.id} className="flex gap-3 animate-fade-in" style={{ animationDelay: `${idx * 80}ms` }}>
-                {/* 时间线圆点 */}
                 <div className="relative z-10 flex-shrink-0 mt-4">
                   <div
                     className="w-3 h-3 rounded-full"
@@ -126,7 +163,6 @@ export function TimelineTab() {
         </div>
       )}
 
-      {/* 分页 */}
       {total > 10 && (
         <div className="flex justify-center gap-2 pt-2">
           <button

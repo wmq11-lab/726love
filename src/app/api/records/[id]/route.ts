@@ -36,7 +36,7 @@ export async function PUT(
     const client = getSupabaseClient();
     const { id } = await params;
     const body = await request.json();
-    const { title, content, mood_tag, record_date, location_id, tags } = body;
+    const { title, content, mood_tag, role, record_date, location_id, tags } = body;
 
     const { data, error } = await client
       .from('love_records')
@@ -44,6 +44,7 @@ export async function PUT(
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
         ...(mood_tag !== undefined && { mood_tag }),
+        ...(role !== undefined && { role }),
         ...(record_date !== undefined && { record_date }),
         ...(location_id !== undefined && { location_id }),
         ...(tags !== undefined && { tags }),

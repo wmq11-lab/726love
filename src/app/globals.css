@@ -217,7 +217,37 @@ input:focus, textarea:focus, select:focus {
   image-rendering: auto;
 }
 
-/* 高德地图全屏容器 */
+/* 恋爱报告翻页动画 */
+@keyframes reportFlipIn {
+  from {
+    opacity: 0;
+    transform: perspective(600px) rotateY(-8deg) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(600px) rotateY(0) translateY(0);
+  }
+}
+
+@keyframes photoPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.report-flip-card {
+  animation: reportFlipIn 0.45s ease-out both;
+}
+
+.report-photo-pop {
+  animation: photoPopIn 0.35s ease-out both;
+}
+
 .space-map-root,
 .space-map-root .space-map-container,
 .space-map-container,

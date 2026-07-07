@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { loadAmapScript, getAmapKey, getAmapSecurityCode, isAmapCompatMode } from '@/lib/amap';
+import { buildFootprintRoute } from '@/lib/footprint-route';
 
 interface MarkerImage {
   id: string;
@@ -40,10 +41,18 @@ export function SpaceTab() {
   const [mapError, setMapError] = useState('');
   const [keyInput, setKeyInput] = useState('');
   const [amapKey, setAmapKey] = useState(getAmapKey());
+  const [showRoute, setShowRoute] = useState(true);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<AMapType>(null);
   const markerInstancesRef = useRef<AMapType[]>([]);
+  const polylineRef = useRef<AMapType>(null);
+  const routeMarkerInstancesRef = useRef<AMapType[]>([]);
+
+  const { waypoints, path: routePath } = useMemo(
+    () => buildFootprintRoute(markers),
+    [markers],
+  );
 
   const fetchMarkers = useCallback(async () => {
     setMarkersLoading(true);
@@ -120,12 +129,23 @@ export function SpaceTab() {
 
     return () => {
       markerInstancesRef.current = [];
+      routeMarkerInstancesRef.current = [];
+      polylineRef.current = null;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.destroy();
         mapInstanceRef.current = null;
       }
     };
   }, [mapReady]);
+
+  const clearRouteOverlays = useCallback((map: AMapType) => {
+    if (polylineRef.current) {
+      map.remove(polylineRef.current);
+      polylineRef.current = null;
+    }
+    routeMarkerInstancesRef.current.forEach((m) => map.remove(m));
+    routeMarkerInstancesRef.current = [];
+  }, []);
 
   // 更新标记点
   useEffect(() => {
@@ -161,6 +181,43 @@ export function SpaceTab() {
 
     map.resize();
   }, [mapReady, markers]);
+
+  // 足迹连线
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const AMap = (window as any).AMap;
+    if (!AMap) return;
+
+    const map = mapInstanceRef.current;
+    clearRouteOverlays(map);
+
+    if (!showRoute || routePath.length < 2) return;
+
+    const polyline = new AMap.Polyline({
+      path: routePath,
+      strokeColor: '#C4956A',
+      strokeWeight: 4,
+      strokeOpacity: 0.75,
+      strokeStyle: 'dashed',
+      lineJoin: 'round',
+      lineCap: 'round',
+      ...(isAmapCompatMode() ? {} : { showDir: true, dirColor: '#F2C9C9' }),
+    });
+    map.add(polyline);
+    polylineRef.current = polyline;
+
+    waypoints.forEach((wp) => {
+      const label = new AMap.Marker({
+        position: [wp.longitude, wp.latitude],
+        content: `<div style="width:20px;height:20px;border-radius:50%;background:#C4956A;color:#fff;font-size:10px;font-weight:700;line-height:20px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(74,55,40,0.25);">${wp.order}</div>`,
+        offset: new AMap.Pixel(-10, -10),
+        zIndex: 120,
+      });
+      map.add(label);
+      routeMarkerInstancesRef.current.push(label);
+    });
+  }, [mapReady, showRoute, routePath, waypoints, clearRouteOverlays]);
 
   // Tab 可见时重绘（解决切换 Tab 后地图空白）
   useEffect(() => {
@@ -264,20 +321,39 @@ export function SpaceTab() {
         </div>
       )}
 
-      {/* 左上角统计 */}
-      <div
-        className="absolute top-20 left-4 z-10 px-3 py-2 rounded-xl text-xs shadow-sm pointer-events-auto"
-        style={{ backgroundColor: 'rgba(255,255,255,0.92)', border: '1px solid #E8D5C4', color: '#4A3728' }}
-      >
-        {markersLoading ? (
-          <span style={{ color: '#A0846C' }}>加载地点...</span>
-        ) : (
-          <>
-            📍 <strong style={{ color: '#C4956A' }}>{markers.length}</strong> 个记忆地点
-            {markers.reduce((s, m) => s + m.imageCount, 0) > 0 && (
-              <span style={{ color: '#A0846C' }}> · {markers.reduce((s, m) => s + m.imageCount, 0)} 张照片</span>
-            )}
-          </>
+      {/* 左上角统计 + 足迹连线开关 */}
+      <div className="absolute top-20 left-4 z-10 flex flex-col gap-2 pointer-events-auto">
+        <div
+          className="px-3 py-2 rounded-xl text-xs shadow-sm"
+          style={{ backgroundColor: 'rgba(255,255,255,0.92)', border: '1px solid #E8D5C4', color: '#4A3728' }}
+        >
+          {markersLoading ? (
+            <span style={{ color: '#A0846C' }}>加载地点...</span>
+          ) : (
+            <>
+              📍 <strong style={{ color: '#C4956A' }}>{markers.length}</strong> 个记忆地点
+              {markers.reduce((s, m) => s + m.imageCount, 0) > 0 && (
+                <span style={{ color: '#A0846C' }}> · {markers.reduce((s, m) => s + m.imageCount, 0)} 张照片</span>
+              )}
+              {waypoints.length >= 2 && (
+                <span style={{ color: '#A0846C' }}> · 足迹 {waypoints.length} 站</span>
+              )}
+            </>
+          )}
+        </div>
+        {waypoints.length >= 2 && (
+          <button
+            type="button"
+            onClick={() => setShowRoute((v) => !v)}
+            className="px-3 py-1.5 rounded-xl text-xs shadow-sm self-start"
+            style={{
+              backgroundColor: showRoute ? '#C4956A' : 'rgba(255,255,255,0.92)',
+              color: showRoute ? '#FFFFFF' : '#4A3728',
+              border: `1px solid ${showRoute ? '#C4956A' : '#E8D5C4'}`,
+            }}
+          >
+            {showRoute ? '🛤 隐藏足迹连线' : '🛤 显示足迹连线'}
+          </button>
         )}
       </div>
 
@@ -295,28 +371,67 @@ export function SpaceTab() {
           className="absolute bottom-0 left-0 right-0 z-10 px-3 pb-4 pt-2 pointer-events-auto"
           style={{ background: 'linear-gradient(transparent, rgba(254,250,245,0.9) 30%)' }}
         >
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {markers.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => handleLocate(m)}
-                className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all"
-                style={{
-                  backgroundColor: selected?.id === m.id ? '#C4956A' : 'rgba(255,255,255,0.95)',
-                  color: selected?.id === m.id ? '#FFFFFF' : '#4A3728',
-                  border: `1px solid ${selected?.id === m.id ? '#C4956A' : '#E8D5C4'}`,
-                }}
-              >
-                {m.coverImage ? (
-                  <img src={m.coverImage} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                ) : (
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FFF8F0' }}>📍</span>
-                )}
-                <span className="max-w-[100px] truncate">{m.name}</span>
-                <span className="opacity-70">{m.imageCount}张</span>
-              </button>
-            ))}
-          </div>
+          {showRoute && waypoints.length >= 2 ? (
+            <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+              {waypoints.map((wp, idx) => (
+                <div key={`${wp.locationId}-${wp.order}`} className="flex items-center flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const marker = markers.find((m) => m.id === wp.locationId);
+                      if (marker) handleLocate(marker);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all"
+                    style={{
+                      backgroundColor: selected?.id === wp.locationId ? '#C4956A' : 'rgba(255,255,255,0.95)',
+                      color: selected?.id === wp.locationId ? '#FFFFFF' : '#4A3728',
+                      border: `1px solid ${selected?.id === wp.locationId ? '#C4956A' : '#E8D5C4'}`,
+                    }}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                      style={{
+                        backgroundColor: selected?.id === wp.locationId ? 'rgba(255,255,255,0.25)' : '#C4956A',
+                        color: '#FFFFFF',
+                      }}
+                    >
+                      {wp.order}
+                    </span>
+                    <span className="max-w-[88px] truncate">{wp.name}</span>
+                    <span className="opacity-70 whitespace-nowrap">
+                      {new Date(wp.recordDate).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                    </span>
+                  </button>
+                  {idx < waypoints.length - 1 && (
+                    <span className="mx-1 text-xs" style={{ color: '#C4956A' }}>→</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {markers.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => handleLocate(m)}
+                  className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all"
+                  style={{
+                    backgroundColor: selected?.id === m.id ? '#C4956A' : 'rgba(255,255,255,0.95)',
+                    color: selected?.id === m.id ? '#FFFFFF' : '#4A3728',
+                    border: `1px solid ${selected?.id === m.id ? '#C4956A' : '#E8D5C4'}`,
+                  }}
+                >
+                  {m.coverImage ? (
+                    <img src={m.coverImage} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                  ) : (
+                    <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FFF8F0' }}>📍</span>
+                  )}
+                  <span className="max-w-[100px] truncate">{m.name}</span>
+                  <span className="opacity-70">{m.imageCount}张</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

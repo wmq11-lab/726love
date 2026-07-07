@@ -34,6 +34,8 @@ export const loveRecords = pgTable(
     content: text("content"),
     mood_tag: varchar("mood_tag", { length: 50 }),
     // mood_tag: 甜蜜 / 感动 / 开心 / 想念 / 生气 / 日常
+    role: varchar("role", { length: 50 }).default("王哥"),
+    // role: 王哥 / 小张
     record_date: timestamp("record_date", { withTimezone: true }).notNull(),
     location_id: varchar("location_id", { length: 36 }).references(() => locations.id, {
       onDelete: "set null",
@@ -46,6 +48,7 @@ export const loveRecords = pgTable(
   (table) => [
     index("love_records_date_idx").on(table.record_date),
     index("love_records_mood_idx").on(table.mood_tag),
+    index("love_records_role_idx").on(table.role),
     index("love_records_location_idx").on(table.location_id),
     index("love_records_created_idx").on(table.created_at),
   ]

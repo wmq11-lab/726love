@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { MAX_IMAGE_SIZE, MAX_IMAGE_SIZE_MB, MAX_IMAGES_PER_RECORD } from '@/lib/upload';
 import { MOOD_OPTIONS } from '@/lib/moods';
+import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
+import { RoleAvatar } from './role-avatar';
 import { TinyHeart } from './puppy-decoration';
 import { MapPin, Loader2, Search, Calendar } from 'lucide-react';
 
@@ -70,6 +72,7 @@ function nowDatetimeLocal(): string {
 export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
   const [content, setContent] = useState('');
   const [moodTag, setMoodTag] = useState('日常');
+  const [role, setRole] = useState<string>(DEFAULT_ROLE);
   const [images, setImages] = useState<PendingImage[]>([]);
   const [location, setLocation] = useState<LocationDraft>(emptyLocation);
   const [uploading, setUploading] = useState(false);
@@ -371,6 +374,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
           title,
           content: content.trim(),
           mood_tag: moodTag,
+          role,
           record_date: recordDate,
           location_id: locationId,
           tags: [],
@@ -410,6 +414,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
         setRecordDateTime(nowDatetimeLocal());
         setDateFromExif(false);
         setDateTouched(false);
+        setRole(DEFAULT_ROLE);
       }, 1500);
     } catch (err) {
       alert('操作失败: ' + (err as Error).message);
@@ -665,6 +670,28 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
               fontFamily: "'Noto Serif SC', serif", lineHeight: '1.8',
             }}
           />
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs mb-2" style={{ color: '#A0846C' }}>记录角色</p>
+          <div className="flex gap-2">
+            {ROLE_OPTIONS.map((r) => (
+              <button
+                key={r.label}
+                type="button"
+                onClick={() => setRole(r.label)}
+                className="flex-1 py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: role === r.label ? '#C4956A' : '#FFFFFF',
+                  color: role === r.label ? '#FFFFFF' : '#4A3728',
+                  border: `1px solid ${role === r.label ? '#C4956A' : '#E8D5C4'}`,
+                }}
+              >
+                <RoleAvatar role={r.label} size={28} />
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mb-4">

@@ -3,6 +3,7 @@
 import { MapPin, Calendar, Trash2, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { getMoodEmoji } from '@/lib/moods';
+import { RoleAvatar } from './role-avatar';
 import { ImagePreviewLightbox } from './image-preview-lightbox';
 
 interface LoveRecord {
@@ -10,6 +11,7 @@ interface LoveRecord {
   title: string;
   content: string;
   mood_tag: string;
+  role?: string;
   record_date: string;
   tags: string[];
   locations?: { id: string; name: string; address?: string } | null;
@@ -153,13 +155,20 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
 
       {/* ====== 右边栏：文字内容 ====== */}
       <div className="flex-1 flex flex-col justify-between p-5 min-w-0">
-        {/* 心情标签 */}
-        <div className="mb-3">
+        {/* 心情 + 角色 */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <span
             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs"
             style={{ backgroundColor: '#F2C9C9', color: '#4A3728' }}
           >
             {moodEmoji} {record.mood_tag}
+          </span>
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs"
+            style={{ backgroundColor: '#FFF8F0', color: '#C4956A', border: '1px solid #E8D5C4' }}
+          >
+            <RoleAvatar role={record.role || '王哥'} size={18} />
+            {record.role || '王哥'}
           </span>
         </div>
 

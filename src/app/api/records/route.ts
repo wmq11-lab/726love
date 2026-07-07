@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
-    const { title, content, mood_tag, record_date, location_id, tags } = body;
+    const { title, content, mood_tag, role, record_date, location_id, tags } = body;
 
     if (!title || !record_date) {
       return NextResponse.json({ success: false, error: '标题和日期为必填项' }, { status: 400 });
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
         title,
         content: content || '',
         mood_tag: mood_tag || '日常',
+        role: role || '王哥',
         record_date,
         location_id: location_id || null,
         tags: tags || [],

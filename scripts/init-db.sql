@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS love_records (
   title varchar(255) NOT NULL,
   content text,
   mood_tag varchar(50),
+  role varchar(50) DEFAULT '王哥',
   record_date timestamptz NOT NULL,
   location_id varchar(36) REFERENCES locations (id) ON DELETE SET NULL,
   tags jsonb DEFAULT '[]'::jsonb,
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS love_records (
 
 CREATE INDEX IF NOT EXISTS love_records_date_idx ON love_records (record_date);
 CREATE INDEX IF NOT EXISTS love_records_mood_idx ON love_records (mood_tag);
+CREATE INDEX IF NOT EXISTS love_records_role_idx ON love_records (role);
 CREATE INDEX IF NOT EXISTS love_records_location_idx ON love_records (location_id);
 CREATE INDEX IF NOT EXISTS love_records_created_idx ON love_records (created_at);
 

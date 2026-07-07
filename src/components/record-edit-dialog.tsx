@@ -3,12 +3,15 @@
 import { useState } from 'react';
 import { Calendar, X } from 'lucide-react';
 import { MOOD_OPTIONS } from '@/lib/moods';
+import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
+import { RoleAvatar } from './role-avatar';
 
 interface LoveRecord {
   id: string;
   title: string;
   content: string;
   mood_tag: string;
+  role?: string;
   record_date: string;
 }
 
@@ -27,6 +30,7 @@ function toDatetimeLocalValue(iso: string): string {
 export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogProps) {
   const [content, setContent] = useState(record.content || '');
   const [moodTag, setMoodTag] = useState(record.mood_tag || '日常');
+  const [role, setRole] = useState(record.role || DEFAULT_ROLE);
   const [recordDateTime, setRecordDateTime] = useState(toDatetimeLocalValue(record.record_date));
   const [saving, setSaving] = useState(false);
 
@@ -44,6 +48,7 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
           title,
           content: content.trim(),
           mood_tag: moodTag,
+          role,
           record_date: new Date(recordDateTime).toISOString(),
         }),
       });
@@ -112,6 +117,28 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
                 fontFamily: "'Noto Serif SC', serif", lineHeight: '1.8',
               }}
             />
+          </div>
+
+          <div>
+            <p className="text-xs mb-2 font-medium" style={{ color: '#4A3728' }}>记录角色</p>
+            <div className="flex gap-2">
+              {ROLE_OPTIONS.map((r) => (
+                <button
+                  key={r.label}
+                  type="button"
+                  onClick={() => setRole(r.label)}
+                  className="flex-1 py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: role === r.label ? '#C4956A' : '#FFFFFF',
+                    color: role === r.label ? '#FFFFFF' : '#4A3728',
+                    border: `1px solid ${role === r.label ? '#C4956A' : '#E8D5C4'}`,
+                  }}
+                >
+                  <RoleAvatar role={r.label} size={24} />
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>

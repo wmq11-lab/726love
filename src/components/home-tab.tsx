@@ -4,12 +4,16 @@ import { useEffect, useState } from 'react';
 import { PawPrints, TinyHeart } from './puppy-decoration';
 import { RecordCard } from './record-card';
 import { RecordEditDialog } from './record-edit-dialog';
+import { OnThisDaySection } from './on-this-day-section';
+import { LoveReportSection } from './love-report-section';
+import { LoveMilestones } from './love-milestones';
 
 interface LoveRecord {
   id: string;
   title: string;
   content: string;
   mood_tag: string;
+  role?: string;
   record_date: string;
   tags: string[];
   locations?: { id: string; name: string } | null;
@@ -56,6 +60,15 @@ export function HomeTab() {
 
   useEffect(() => { fetchData(); }, []);
 
+  const handleOnThisDayEdit = (record: LoveRecord) => {
+    const full = recentRecords.find((r) => r.id === record.id);
+    setEditingRecord(full ?? {
+      ...record,
+      title: record.content?.slice(0, 20) || '无题',
+      tags: [],
+    });
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
@@ -90,6 +103,15 @@ export function HomeTab() {
           </div>
         </div>
       </div>
+
+      {/* 在一起 & 生日 */}
+      <LoveMilestones />
+
+      {/* 历史上的今天 */}
+      <OnThisDaySection onEdit={handleOnThisDayEdit} />
+
+      {/* 恋爱数据报告 */}
+      <LoveReportSection />
 
       {/* 统计卡片 */}
       <div className="rounded-2xl p-4 relative overflow-hidden" style={{ backgroundColor: '#FFF8F0', border: '1.5px solid #F2C9C9' }}>
