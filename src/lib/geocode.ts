@@ -1,3 +1,14 @@
+const AMAP_FETCH_TIMEOUT_MS = 8000;
+
+async function fetchAmapJson(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(AMAP_FETCH_TIMEOUT_MS) });
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /** 高德逆地理编码：经纬度 → 地址 */
 export async function reverseGeocode(
   latitude: number,
@@ -9,27 +20,25 @@ export async function reverseGeocode(
   const location = `${longitude},${latitude}`;
   const url = `https://restapi.amap.com/v3/geocode/regeo?key=${key}&location=${location}&extensions=base`;
 
-  try {
-    const res = await fetch(url);
-    const json = await res.json();
-    if (json.status !== '1' || !json.regeocode) return null;
+  const json = await fetchAmapJson(url);
+  if (!json || json.status !== '1' || !json.regeocode) return null;
 
-    const regeo = json.regeocode;
-    const address = regeo.formatted_address || '';
-    const pois = regeo.pois as Array<{ name: string }> | undefined;
-    const poiName = pois?.[0]?.name;
-    const component = regeo.addressComponent;
-    const district = [component?.township, component?.district, component?.city]
-      .filter(Boolean)
-      .join('');
+  const regeo = json.regeocode as {
+    formatted_address?: string;
+    pois?: Array<{ name: string }>;
+    addressComponent?: { township?: string; district?: string; city?: string };
+  };
+  const address = regeo.formatted_address || '';
+  const poiName = regeo.pois?.[0]?.name;
+  const component = regeo.addressComponent;
+  const district = [component?.township, component?.district, component?.city]
+    .filter(Boolean)
+    .join('');
 
-    return {
-      name: poiName || district || address.slice(0, 20) || '照片拍摄地',
-      address,
-    };
-  } catch {
-    return null;
-  }
+  return {
+    name: poiName || district || address.slice(0, 20) || '照片拍摄地',
+    address,
+  };
 }
 
 export interface PlaceSuggestion {
@@ -47,36 +56,37 @@ function parseLocation(loc: string): { latitude: number; longitude: number } | n
   return { latitude: lat, longitude: lng };
 }
 
-/** 高德地点搜索（输入提示） */
+/** 高德地点搜索（输入提示）— 服务端调用；Vercel 海外节点可能无法访问高德 */
 export async function searchPlaces(keyword: string): Promise<PlaceSuggestion[]> {
   const key = process.env.NEXT_PUBLIC_AMAP_KEY;
   if (!key || !keyword.trim()) return [];
 
   const url = `https://restapi.amap.com/v3/assistant/inputtips?key=${key}&keywords=${encodeURIComponent(keyword.trim())}&datatype=all`;
 
-  try {
-    const res = await fetch(url);
-    const json = await res.json();
-    if (json.status !== '1' || !Array.isArray(json.tips)) return [];
+  const json = await fetchAmapJson(url);
+  if (!json || json.status !== '1' || !Array.isArray(json.tips)) return [];
 
-    const results: PlaceSuggestion[] = [];
-    for (const tip of json.tips) {
-      if (!tip.name || tip.name === '[]') continue;
-      const coords = tip.location ? parseLocation(tip.location) : null;
-      if (!coords) continue;
-      results.push({
-        id: tip.id || `${tip.name}_${coords.latitude}`,
-        name: tip.name,
-        address: tip.address || '',
-        district: tip.district || '',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      });
-    }
-    return results.slice(0, 8);
-  } catch {
-    return [];
+  const results: PlaceSuggestion[] = [];
+  for (const tip of json.tips as Array<{
+    id?: string;
+    name?: string;
+    address?: string;
+    district?: string;
+    location?: string;
+  }>) {
+    if (!tip.name || tip.name === '[]') continue;
+    const coords = tip.location ? parseLocation(tip.location) : null;
+    if (!coords) continue;
+    results.push({
+      id: tip.id || `${tip.name}_${coords.latitude}`,
+      name: tip.name,
+      address: tip.address || '',
+      district: tip.district || '',
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    });
   }
+  return results.slice(0, 8);
 }
 
 /** 高德地理编码：地址 → 坐标 */
@@ -88,24 +98,19 @@ export async function geocodeAddress(
 
   const url = `https://restapi.amap.com/v3/geocode/geo?key=${key}&address=${encodeURIComponent(address.trim())}`;
 
-  try {
-    const res = await fetch(url);
-    const json = await res.json();
-    if (json.status !== '1' || !json.geocodes?.[0]) return null;
+  const json = await fetchAmapJson(url);
+  if (!json || json.status !== '1' || !Array.isArray(json.geocodes) || !json.geocodes[0]) return null;
 
-    const geo = json.geocodes[0];
-    const coords = parseLocation(geo.location);
-    if (!coords) return null;
+  const geo = json.geocodes[0] as { location?: string; formatted_address?: string };
+  const coords = geo.location ? parseLocation(geo.location) : null;
+  if (!coords) return null;
 
-    const formatted = geo.formatted_address || address.trim();
-    return {
-      name: formatted.slice(0, 20),
-      address: formatted,
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-    };
-  } catch {
-    return null;
-  }
+  const formatted = geo.formatted_address || address.trim();
+  return {
+    name: formatted.slice(0, 20),
+    address: formatted,
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+  };
 }
 

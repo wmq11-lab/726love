@@ -473,7 +473,7 @@ export function SpaceTab() {
                     className="aspect-square rounded-lg overflow-hidden"
                     style={{ border: '1px solid #E8D5C4' }}
                   >
-                    <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    <img src={img.url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </a>
                 ))}
               </div>

@@ -4,6 +4,13 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { MAX_IMAGE_SIZE, MAX_IMAGE_SIZE_MB, MAX_IMAGES_PER_RECORD } from '@/lib/upload';
 import { MOOD_OPTIONS } from '@/lib/moods';
 import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
+import {
+  searchPlacesClient,
+  reverseGeocodeClient,
+  geocodeAddressClient,
+  type PlaceSuggestion,
+} from '@/lib/amap';
+import { compressImageFile } from '@/lib/compress-image';
 import { RoleAvatar } from './role-avatar';
 import { TinyHeart } from './puppy-decoration';
 import { MapPin, Loader2, Search, Calendar } from 'lucide-react';
@@ -34,15 +41,6 @@ interface LocationDraft {
   longitude: number | null;
   geocoding: boolean;
   source: 'none' | 'gps' | 'search' | 'manual';
-}
-
-interface PlaceSuggestion {
-  id: string;
-  name: string;
-  address: string;
-  district: string;
-  latitude: number;
-  longitude: number;
 }
 
 const emptyLocation = (): LocationDraft => ({
@@ -131,20 +129,20 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     setLocation((prev) => ({ ...prev, geocoding: true }));
 
     try {
-      const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`, { signal: controller.signal });
-      const json = await res.json();
-      if (json.success && json.data) {
+      const data = await reverseGeocodeClient(lat, lng);
+      if (controller.signal.aborted) return;
+      if (data) {
         setLocation((prev) => ({
           ...prev,
           enabled: true,
-          name: json.data.name || prev.name,
-          address: json.data.address || prev.address,
+          name: data.name || prev.name,
+          address: data.address || prev.address,
           latitude: lat,
           longitude: lng,
           geocoding: false,
           source: 'gps',
         }));
-        setAddressQuery(json.data.address || json.data.name || '');
+        setAddressQuery(data.address || data.name || '');
       } else {
         setLocation((prev) => ({
           ...prev,
@@ -243,16 +241,18 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     searchAbortRef.current = controller;
     setSearching(true);
     try {
-      const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
-      const json = await res.json();
-      if (json.success) {
-        setSearchResults(json.data);
-        setShowSuggestions(json.data.length > 0);
-      }
+      // 在浏览器调高德 JS API；Vercel 服务端调 restapi.amap.com 常会超时无响应
+      const data = await searchPlacesClient(query);
+      if (controller.signal.aborted) return;
+      setSearchResults(data);
+      setShowSuggestions(data.length > 0);
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setSearchResults([]);
+      if ((err as Error).name !== 'AbortError') {
+        setSearchResults([]);
+        setShowSuggestions(false);
+      }
     } finally {
-      setSearching(false);
+      if (!controller.signal.aborted) setSearching(false);
     }
   }, []);
 
@@ -331,16 +331,27 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
       let locData = { ...location, address: location.address || addressQuery.trim() };
 
       if (locData.enabled && locData.latitude == null && locData.address) {
-        const geoRes = await fetch(`/api/geocode/search?q=${encodeURIComponent(locData.address)}`);
-        const geoJson = await safeJson(geoRes);
-        if (geoJson.success && geoJson.data?.[0]) {
-          const p = geoJson.data[0];
+        let resolved = (await searchPlacesClient(locData.address))[0] ?? null;
+        if (!resolved) {
+          const geo = await geocodeAddressClient(locData.address);
+          if (geo) {
+            resolved = {
+              id: `geo_${geo.latitude}_${geo.longitude}`,
+              name: geo.name,
+              address: geo.address,
+              district: '',
+              latitude: geo.latitude,
+              longitude: geo.longitude,
+            };
+          }
+        }
+        if (resolved) {
           locData = {
             ...locData,
-            name: locData.name || p.name,
-            address: [p.district, p.address].filter(Boolean).join('') || p.name,
-            latitude: p.latitude,
-            longitude: p.longitude,
+            name: locData.name || resolved.name,
+            address: [resolved.district, resolved.address].filter(Boolean).join('') || resolved.name,
+            latitude: resolved.latitude,
+            longitude: resolved.longitude,
           };
         }
       }
@@ -389,8 +400,9 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
 
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
+        const compressed = await compressImageFile(img.file);
         const formData = new FormData();
-        formData.append('file', img.file);
+        formData.append('file', compressed);
         formData.append('record_id', recordId);
         formData.append('template_style', 'simple');
         formData.append('sort_order', String(i));

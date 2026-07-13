@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { generateImageUrl } from '@/lib/storage';
+import { buildThumbUrl } from '@/lib/storage';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -21,17 +21,13 @@ function parseLocation(raw: unknown): LocRow | null {
   return loc;
 }
 
-/** 地图 API 不返回超大 base64，避免 EdgeOne 响应体超限导致 500 */
-async function resolveMarkerImageUrl(key: string | null | undefined): Promise<string | null> {
+/** 地图 API 不返回超大 base64，避免响应体超限；对象存储图走缩略图代理 */
+function resolveMarkerImageUrl(key: string | null | undefined, width = 320): string | null {
   if (!key) return null;
   if (key.startsWith('data:')) {
     return key.length <= 8000 ? key : null;
   }
-  try {
-    return await generateImageUrl(key, 86400);
-  } catch {
-    return null;
-  }
+  return buildThumbUrl(key, width);
 }
 
 /** GET /api/space/markers — 地图标记：按地点聚合带图片的记忆 */
@@ -77,7 +73,7 @@ export async function GET() {
 
         const images: Array<{ id: string; url: string }> = [];
         for (const img of sortedImages.slice(0, 6)) {
-          const url = await resolveMarkerImageUrl(img.storage_key as string);
+          const url = resolveMarkerImageUrl(img.storage_key as string);
           if (url) images.push({ id: img.id, url });
         }
 

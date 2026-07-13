@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { generateImageUrl } from '@/lib/storage';
+import { enrichRecordsWithImages } from '@/lib/record-enrich';
 import { logger } from '@/lib/logger';
 
 // GET /api/records — 获取记录列表（支持搜索、筛选、分页）
@@ -38,26 +38,8 @@ export async function GET(request: NextRequest) {
 
     if (error) throw new Error(`查询失败: ${error.message}`);
 
-    // 为每条记录的图片生成签名 URL
-    const enrichedData = await Promise.all((data ?? []).map(async (record) => {
-      const sortedImages = [...(record.record_images ?? [])].sort(
-        (a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-      );
-      const images = await Promise.all(sortedImages.map(async (img: { id: string; storage_key: string; template_style: string; caption?: string }) => {
-        const key = img.storage_key;
-        // base64 data URL 直接作为 url，无需签名
-        if (key && key.startsWith('data:')) {
-          return { ...img, url: key };
-        }
-        try {
-          const signedUrl = await generateImageUrl(key, 86400);
-          return signedUrl ? { ...img, url: signedUrl } : img;
-        } catch {
-          return img;
-        }
-      }));
-      return { ...record, record_images: images };
-    }));
+    // 列表用 /api/img 缩略图，避免服务端逐张签名 + 浏览器拉原图
+    const enrichedData = await enrichRecordsWithImages(data ?? []);
 
     return NextResponse.json({ success: true, data: enrichedData, total: count ?? 0, page, limit });
   } catch (err) {

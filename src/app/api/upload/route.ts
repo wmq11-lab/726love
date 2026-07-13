@@ -50,6 +50,7 @@ async function tryUploadToS3(buffer: Buffer, fileName: string, contentType: stri
       fileContent: buffer,
       fileName,
       contentType,
+      cacheControl: 'public, max-age=31536000, immutable',
     });
     const result = await Promise.race([
       uploadPromise,

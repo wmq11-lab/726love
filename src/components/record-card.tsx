@@ -15,7 +15,7 @@ interface LoveRecord {
   record_date: string;
   tags: string[];
   locations?: { id: string; name: string; address?: string } | null;
-  record_images?: Array<{ id: string; storage_key: string; template_style: string; url?: string }>;
+  record_images?: Array<{ id: string; storage_key: string; template_style: string; url?: string; fullUrl?: string }>;
 }
 
 interface RecordCardProps {
@@ -32,7 +32,10 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
   const [errorIds, setErrorIds] = useState<Set<string>>(new Set());
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
-  const previewImages = images.map((img) => ({ id: img.id, url: img.url! }));
+  const previewImages = images.map((img) => ({
+    id: img.id,
+    url: img.fullUrl || img.url!,
+  }));
 
   const dateObj = new Date(record.record_date);
   const timeStr = dateObj.toLocaleTimeString('zh-CN', {
@@ -114,6 +117,8 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
                   <img
                     src={img.url}
                     alt={record.title}
+                    loading={idx === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
                     className={`w-full h-full object-cover transition-opacity group-hover:opacity-90 ${loadedIds.has(img.id) ? '' : 'opacity-0'}`}
                     style={{ minHeight: images.length === 1 ? 200 : 96 }}
                     onLoad={() => setLoadedIds((prev) => new Set(prev).add(img.id))}

@@ -203,7 +203,7 @@ export function LoveReportSection() {
                 className="aspect-square rounded-lg overflow-hidden report-photo-pop"
                 style={{ border: '1px solid #E8D5C4', animationDelay: `${idx * 50}ms` }}
               >
-                <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                <img src={photo.url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               </a>
             ))}
           </div>

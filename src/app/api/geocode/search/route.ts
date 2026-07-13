@@ -6,6 +6,13 @@ import { searchPlaces, geocodeAddress } from '@/lib/geocode';
 
 /** GET /api/geocode/search?q=关键词 — 地点搜索（输入提示） */
 export async function GET(request: NextRequest) {
+  if (!process.env.NEXT_PUBLIC_AMAP_KEY) {
+    return NextResponse.json(
+      { success: false, error: '未配置 NEXT_PUBLIC_AMAP_KEY（请在 Vercel 环境变量中设置后重新部署）' },
+      { status: 503 },
+    );
+  }
+
   const q = request.nextUrl.searchParams.get('q')?.trim() || '';
 
   if (!q) {
@@ -32,5 +39,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, data: suggestions });
+  return NextResponse.json({
+    success: true,
+    data: suggestions,
+    // 海外节点调高德常失败；前端已改为浏览器端 JS API，此接口仅作兼容
+    hint: suggestions.length === 0
+      ? '无结果。若在 Vercel 上长期为空，请改用页面内地点搜索（浏览器端高德 JS API）'
+      : undefined,
+  });
 }

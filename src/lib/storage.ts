@@ -31,6 +31,14 @@ function createS3Client(): S3Client | null {
   });
 }
 
+/** 供图片缩放代理等内部复用 */
+export function getS3ClientAndBucket(): { client: S3Client; bucketName: string } | null {
+  const { bucketName } = getBucketConfig();
+  const client = createS3Client();
+  if (!client || !bucketName) return null;
+  return { client, bucketName };
+}
+
 /** 创建 S3 兼容对象存储客户端（Cloudflare R2 等） */
 export async function getStorage() {
   const config = getBucketConfig();
@@ -44,6 +52,7 @@ export async function getStorage() {
       fileContent: Buffer | Uint8Array;
       fileName: string;
       contentType?: string;
+      cacheControl?: string;
     }) {
       await client.send(
         new PutObjectCommand({
@@ -51,6 +60,7 @@ export async function getStorage() {
           Key: params.fileName,
           Body: params.fileContent,
           ContentType: params.contentType,
+          CacheControl: params.cacheControl || 'public, max-age=31536000, immutable',
         }),
       );
       return params.fileName;
@@ -64,16 +74,27 @@ export function isObjectStorageConfigured(): boolean {
   return Boolean(endpointUrl && bucketName && accessKey && secretKey);
 }
 
-/** 生成图片访问签名 URL（兼容 R2） */
+/** 列表/卡片用的缩放图地址（走 /api/img，避免直接拉原图） */
+export function buildThumbUrl(key: string, width = 720): string {
+  if (!key || key.startsWith('data:')) return key;
+  return `/api/img?key=${encodeURIComponent(key)}&w=${width}`;
+}
+
+/** 灯箱/大图用的地址 */
+export function buildFullImageUrl(key: string, width = 1600): string {
+  if (!key || key.startsWith('data:')) return key;
+  return `/api/img?key=${encodeURIComponent(key)}&w=${width}`;
+}
+
+/** 生成图片访问签名 URL（兼容 R2；直链场景备用） */
 export async function generateImageUrl(
   key: string,
   expireTime = 86400,
 ): Promise<string | null> {
   if (!key || key.startsWith('data:')) return key;
 
-  const { bucketName } = getBucketConfig();
-  const client = createS3Client();
-  if (!client || !bucketName) return null;
+  const ctx = getS3ClientAndBucket();
+  if (!ctx) return null;
 
   try {
     const sign = getSignedUrl as (
@@ -82,8 +103,8 @@ export async function generateImageUrl(
       opts: { expiresIn: number },
     ) => Promise<string>;
     return await sign(
-      client,
-      new GetObjectCommand({ Bucket: bucketName, Key: key }),
+      ctx.client,
+      new GetObjectCommand({ Bucket: ctx.bucketName, Key: key }),
       { expiresIn: expireTime },
     );
   } catch {

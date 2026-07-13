@@ -107,6 +107,8 @@ export function OnThisDaySection({ onEdit }: OnThisDaySectionProps) {
                         key={img.id}
                         src={img.url}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-full aspect-square object-cover rounded-lg"
                         style={{ border: '1px solid #F0E3D5' }}
                       />
