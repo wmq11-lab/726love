@@ -85,7 +85,7 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
 
       const title = content.trim()
         ? content.trim().slice(0, 20) + (content.trim().length > 20 ? '...' : '')
-        : '无题';
+        : '';
 
       const res = await fetch(`/api/records/${record.id}`, {
         method: 'PUT',

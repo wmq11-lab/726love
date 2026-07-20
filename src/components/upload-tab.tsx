@@ -181,7 +181,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     try {
       const title = content.trim()
         ? content.trim().slice(0, 20) + (content.trim().length > 20 ? '...' : '')
-        : '无题';
+        : '';
 
       const recordDate = new Date(recordDateTime).toISOString();
 

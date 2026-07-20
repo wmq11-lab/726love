@@ -486,9 +486,11 @@ export function SpaceTab() {
                 <p className="text-[10px] mb-1" style={{ color: '#A0846C' }}>
                   {new Date(rec.record_date).toLocaleDateString('zh-CN')} · {rec.mood_tag}
                 </p>
-                <p className="text-xs leading-relaxed line-clamp-3" style={{ color: '#4A3728', fontFamily: "'Noto Serif SC', serif" }}>
-                  {rec.content || rec.title}
-                </p>
+                {rec.content?.trim() ? (
+                  <p className="text-xs leading-relaxed line-clamp-3" style={{ color: '#4A3728', fontFamily: "'Noto Serif SC', serif" }}>
+                    {rec.content}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

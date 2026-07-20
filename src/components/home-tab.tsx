@@ -70,7 +70,7 @@ export function HomeTab() {
     const full = recentRecords.find((r) => r.id === record.id);
     setEditingRecord(full ?? {
       id: record.id,
-      title: record.content?.slice(0, 20) || '无题',
+      title: record.content?.slice(0, 20) || '',
       content: record.content,
       mood_tag: record.mood_tag,
       role: record.role,

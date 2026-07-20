@@ -183,18 +183,20 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
           </span>
         </div>
 
-        {/* 文字内容 */}
-        <p
-          className="text-sm leading-relaxed flex-1"
-          style={{
-            color: '#4A3728',
-            fontFamily: "'Noto Serif SC', serif",
-            lineHeight: '1.8',
-            wordBreak: 'break-word',
-          }}
-        >
-          {record.content || '（无文字）'}
-        </p>
+        {/* 文字内容：无文案时不展示占位 */}
+        {record.content?.trim() ? (
+          <p
+            className="text-sm leading-relaxed flex-1"
+            style={{
+              color: '#4A3728',
+              fontFamily: "'Noto Serif SC', serif",
+              lineHeight: '1.8',
+              wordBreak: 'break-word',
+            }}
+          >
+            {record.content}
+          </p>
+        ) : null}
 
         {/* 底部：标签 + 操作 */}
         <div className="flex items-center justify-between mt-3 gap-2 flex-wrap">

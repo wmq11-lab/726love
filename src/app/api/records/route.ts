@@ -55,14 +55,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, content, mood_tag, role, record_date, location_id, tags } = body;
 
-    if (!title || !record_date) {
-      return NextResponse.json({ success: false, error: '标题和日期为必填项' }, { status: 400 });
+    if (!record_date) {
+      return NextResponse.json({ success: false, error: '日期为必填项' }, { status: 400 });
     }
 
     const { data, error } = await client
       .from('love_records')
       .insert({
-        title,
+        title: typeof title === 'string' ? title : '',
         content: content || '',
         mood_tag: mood_tag || '日常',
         role: role || '王哥',

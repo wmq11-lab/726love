@@ -116,12 +116,14 @@ export function OnThisDaySection({ onEdit }: OnThisDaySectionProps) {
                   </div>
                 )}
 
-                <p
-                  className="text-sm leading-relaxed line-clamp-3"
-                  style={{ color: '#4A3728', fontFamily: "'Noto Serif SC', serif" }}
-                >
-                  {record.content || '（无文字）'}
-                </p>
+                {record.content?.trim() ? (
+                  <p
+                    className="text-sm leading-relaxed line-clamp-3"
+                    style={{ color: '#4A3728', fontFamily: "'Noto Serif SC', serif" }}
+                  >
+                    {record.content}
+                  </p>
+                ) : null}
 
                 {record.locations?.name && (
                   <p className="text-[10px] mt-1" style={{ color: '#A0846C' }}>
