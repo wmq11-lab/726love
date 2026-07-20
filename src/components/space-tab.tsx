@@ -315,7 +315,7 @@ export function SpaceTab() {
         >
           <p>{mapError}</p>
           <p className="mt-1 opacity-80">
-            请确认 Key 类型为「Web端(JS API)」，并在高德控制台将 localhost 加入域名白名单；
+            请确认 Key 类型为「Web端(JS API)」，并在高德控制台将 <strong>localhost</strong>、<strong>127.0.0.1</strong>、<strong>726love.vercel.app</strong> 加入域名白名单；
             若使用 2.0 安全密钥，请在 .env 添加 NEXT_PUBLIC_AMAP_SECURITY_CODE
           </p>
         </div>

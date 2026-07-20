@@ -8,6 +8,7 @@ import {
   searchPlacesClient,
   reverseGeocodeClient,
   geocodeAddressClient,
+  resolvePlaceForSave,
   type PlaceSuggestion,
 } from '@/lib/amap';
 import { compressImageFile } from '@/lib/compress-image';
@@ -241,8 +242,18 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     searchAbortRef.current = controller;
     setSearching(true);
     try {
-      // 在浏览器调高德 JS API；Vercel 服务端调 restapi.amap.com 常会超时无响应
-      const data = await searchPlacesClient(query);
+      let data = await searchPlacesClient(query);
+      if (data.length === 0) {
+        try {
+          const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(query.trim())}`, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          const json = (await res.json()) as { success?: boolean; data?: PlaceSuggestion[] };
+          if (json.success && Array.isArray(json.data)) data = json.data;
+        } catch {
+          // 浏览器端已调高德；服务端仅作补充
+        }
+      }
       if (controller.signal.aborted) return;
       setSearchResults(data);
       setShowSuggestions(data.length > 0);
@@ -279,14 +290,25 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  const selectPlace = (place: PlaceSuggestion) => {
+  const selectPlace = async (place: PlaceSuggestion) => {
+    let latitude = place.latitude;
+    let longitude = place.longitude;
+    if (latitude == null || longitude == null) {
+      const geocodeQuery = [place.district, place.name, place.address].filter(Boolean).join('') || place.name;
+      const resolved = await resolvePlaceForSave(geocodeQuery);
+      if (resolved?.latitude != null && resolved.longitude != null) {
+        latitude = resolved.latitude;
+        longitude = resolved.longitude;
+      }
+    }
+
     const fullAddress = [place.district, place.address].filter(Boolean).join('') || place.name;
     setLocation({
       enabled: true,
       name: place.name,
       address: fullAddress,
-      latitude: place.latitude,
-      longitude: place.longitude,
+      latitude,
+      longitude,
       geocoding: false,
       source: 'search',
     });
@@ -331,20 +353,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
       let locData = { ...location, address: location.address || addressQuery.trim() };
 
       if (locData.enabled && locData.latitude == null && locData.address) {
-        let resolved = (await searchPlacesClient(locData.address))[0] ?? null;
-        if (!resolved) {
-          const geo = await geocodeAddressClient(locData.address);
-          if (geo) {
-            resolved = {
-              id: `geo_${geo.latitude}_${geo.longitude}`,
-              name: geo.name,
-              address: geo.address,
-              district: '',
-              latitude: geo.latitude,
-              longitude: geo.longitude,
-            };
-          }
-        }
+        const resolved = await resolvePlaceForSave(locData.address);
         if (resolved) {
           locData = {
             ...locData,
@@ -354,6 +363,15 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
             longitude: resolved.longitude,
           };
         }
+      }
+
+      if (
+        locData.enabled
+        && locData.latitude == null
+        && locData.address.trim()
+      ) {
+        alert('未能解析该地址的坐标，将仅保存文字记忆（不写入地图）。请检查高德 Key 或在搜索建议中点选地点。');
+        locData = { ...locData, enabled: false };
       }
 
       if (locData.enabled && locData.latitude != null && locData.longitude != null) {

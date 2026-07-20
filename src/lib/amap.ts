@@ -1,4 +1,5 @@
 const AMAP_SCRIPT_ID = 'amap-js-sdk';
+const AMAP_PLUGIN_TIMEOUT_MS = 12_000;
 
 function isAmapReady(): boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,10 +76,35 @@ export function loadAmapScript(key: string, securityJsCode?: string): Promise<vo
     script.id = AMAP_SCRIPT_ID;
     script.src = expectedSrc;
     script.async = true;
-    script.onload = () => resolve();
     script.onerror = () => reject(new Error('高德地图加载失败，请检查 Key 与域名白名单'));
+    script.onload = () => {
+      const poll = setInterval(() => {
+        if (isAmapReady()) {
+          cleanup();
+          resolve();
+        }
+      }, 50);
+      const timeout = setTimeout(() => {
+        cleanup();
+        if (isAmapReady()) resolve();
+        else reject(new Error('高德地图加载超时，请检查 Key、安全密钥与域名白名单'));
+      }, 15000);
+      const cleanup = () => {
+        clearInterval(poll);
+        clearTimeout(timeout);
+      };
+    };
     document.head.appendChild(script);
   });
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
 }
 
 export function getAmapKey(): string {
@@ -98,8 +124,9 @@ export interface PlaceSuggestion {
   name: string;
   address: string;
   district: string;
-  latitude: number;
-  longitude: number;
+  /** inputtips 常无坐标，选中后再地理编码 */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 function parseLocation(loc: string): { latitude: number; longitude: number } | null {
@@ -182,7 +209,8 @@ export async function searchPlacesClient(keyword: string): Promise<PlaceSuggesti
 
   const AMap = await ensureAmap();
 
-  return new Promise((resolve, reject) => {
+  return withTimeout(
+    new Promise<PlaceSuggestion[]>((resolve, reject) => {
     AMap.plugin('AMap.AutoComplete', () => {
       try {
         const auto = new AMap.AutoComplete({ city: '全国' });
@@ -195,14 +223,13 @@ export async function searchPlacesClient(keyword: string): Promise<PlaceSuggesti
           for (const tip of result.tips) {
             if (!tip.name || tip.name === '[]') continue;
             const coords = tipCoords(tip.location);
-            if (!coords) continue;
             results.push({
-              id: tip.id || `${tip.name}_${coords.latitude}`,
+              id: tip.id || `${tip.name}_${results.length}`,
               name: tip.name,
               address: tipAddress(tip.address),
               district: tip.district || '',
-              latitude: coords.latitude,
-              longitude: coords.longitude,
+              latitude: coords?.latitude ?? null,
+              longitude: coords?.longitude ?? null,
             });
           }
           resolve(results.slice(0, 8));
@@ -211,7 +238,10 @@ export async function searchPlacesClient(keyword: string): Promise<PlaceSuggesti
         reject(err);
       }
     });
-  });
+    }),
+    AMAP_PLUGIN_TIMEOUT_MS,
+    '地点搜索超时，请检查高德 Key 或稍后重试',
+  );
 }
 
 /** 浏览器端逆地理编码：经纬度 → 地址 */
@@ -221,31 +251,35 @@ export async function reverseGeocodeClient(
 ): Promise<{ name: string; address: string } | null> {
   const AMap = await ensureAmap();
 
-  return new Promise((resolve, reject) => {
-    AMap.plugin('AMap.Geocoder', () => {
-      try {
-        const geocoder = new AMap.Geocoder();
-        geocoder.getAddress([longitude, latitude], (status, result) => {
-          if (status !== 'complete' || !result?.regeocode) {
-            resolve(null);
-            return;
-          }
-          const regeo = result.regeocode;
-          const address = regeo.formattedAddress || '';
-          const poiName = regeo.pois?.[0]?.name;
-          const component = regeo.addressComponent;
-          const city = Array.isArray(component?.city) ? component?.city[0] : component?.city;
-          const district = [component?.township, component?.district, city].filter(Boolean).join('');
-          resolve({
-            name: poiName || district || address.slice(0, 20) || '照片拍摄地',
-            address,
+  return withTimeout(
+    new Promise<{ name: string; address: string } | null>((resolve, reject) => {
+      AMap.plugin('AMap.Geocoder', () => {
+        try {
+          const geocoder = new AMap.Geocoder();
+          geocoder.getAddress([longitude, latitude], (status, result) => {
+            if (status !== 'complete' || !result?.regeocode) {
+              resolve(null);
+              return;
+            }
+            const regeo = result.regeocode;
+            const address = regeo.formattedAddress || '';
+            const poiName = regeo.pois?.[0]?.name;
+            const component = regeo.addressComponent;
+            const city = Array.isArray(component?.city) ? component?.city[0] : component?.city;
+            const district = [component?.township, component?.district, city].filter(Boolean).join('');
+            resolve({
+              name: poiName || district || address.slice(0, 20) || '照片拍摄地',
+              address,
+            });
           });
-        });
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }),
+    AMAP_PLUGIN_TIMEOUT_MS,
+    '逆地理编码超时',
+  );
 }
 
 /** 浏览器端地理编码：地址 → 坐标 */
@@ -257,27 +291,76 @@ export async function geocodeAddressClient(
 
   const AMap = await ensureAmap();
 
-  return new Promise((resolve, reject) => {
-    AMap.plugin('AMap.Geocoder', () => {
-      try {
-        const geocoder = new AMap.Geocoder();
-        geocoder.getLocation(q, (status, result) => {
-          const geo = result?.geocodes?.[0];
-          if (status !== 'complete' || !geo?.location) {
-            resolve(null);
-            return;
+  return withTimeout(
+    new Promise<{ name: string; address: string; latitude: number; longitude: number } | null>(
+      (resolve, reject) => {
+        AMap.plugin('AMap.Geocoder', () => {
+          try {
+            const geocoder = new AMap.Geocoder();
+            geocoder.getLocation(q, (status, result) => {
+              const geo = result?.geocodes?.[0];
+              if (status !== 'complete' || !geo?.location) {
+                resolve(null);
+                return;
+              }
+              const formatted = geo.formattedAddress || q;
+              resolve({
+                name: formatted.slice(0, 20),
+                address: formatted,
+                latitude: geo.location.lat,
+                longitude: geo.location.lng,
+              });
+            });
+          } catch (err) {
+            reject(err);
           }
-          const formatted = geo.formattedAddress || q;
-          resolve({
-            name: formatted.slice(0, 20),
-            address: formatted,
-            latitude: geo.location.lat,
-            longitude: geo.location.lng,
-          });
         });
-      } catch (err) {
-        reject(err);
-      }
+      },
+    ),
+    AMAP_PLUGIN_TIMEOUT_MS,
+    '地理编码超时',
+  );
+}
+
+/** 发布记忆时解析地址：客户端高德 → 服务端 API，避免无限等待 */
+export async function resolvePlaceForSave(
+  address: string,
+): Promise<PlaceSuggestion | null> {
+  const q = address.trim();
+  if (!q) return null;
+
+  try {
+    const fromAuto = (await searchPlacesClient(q))[0];
+    if (fromAuto) return fromAuto;
+  } catch {
+    // 继续降级
+  }
+
+  try {
+    const geo = await geocodeAddressClient(q);
+    if (geo) {
+      return {
+        id: `geo_${geo.latitude}_${geo.longitude}`,
+        name: geo.name,
+        address: geo.address,
+        district: '',
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+      };
+    }
+  } catch {
+    // 继续降级
+  }
+
+  try {
+    const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}`, {
+      signal: AbortSignal.timeout(12_000),
     });
-  });
+    const json = (await res.json()) as { success?: boolean; data?: PlaceSuggestion[] };
+    if (json.success && json.data?.[0]) return json.data[0];
+  } catch {
+    // ignore
+  }
+
+  return null;
 }

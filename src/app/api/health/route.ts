@@ -16,6 +16,7 @@ export async function GET() {
     COZE_BUCKET_SECRET_KEY: Boolean(process.env.COZE_BUCKET_SECRET_KEY),
     COZE_PROJECT_ENV: process.env.COZE_PROJECT_ENV || '(未设置)',
     NEXT_PUBLIC_AMAP_KEY: Boolean(process.env.NEXT_PUBLIC_AMAP_KEY),
+    NEXT_PUBLIC_AMAP_SECURITY_CODE: Boolean(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE),
   };
 
   const envOk =

@@ -46,8 +46,8 @@ export interface PlaceSuggestion {
   name: string;
   address: string;
   district: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 function parseLocation(loc: string): { latitude: number; longitude: number } | null {
@@ -76,14 +76,13 @@ export async function searchPlaces(keyword: string): Promise<PlaceSuggestion[]> 
   }>) {
     if (!tip.name || tip.name === '[]') continue;
     const coords = tip.location ? parseLocation(tip.location) : null;
-    if (!coords) continue;
     results.push({
-      id: tip.id || `${tip.name}_${coords.latitude}`,
+      id: tip.id || `${tip.name}_${results.length}`,
       name: tip.name,
       address: tip.address || '',
       district: tip.district || '',
-      latitude: coords.latitude,
-      longitude: coords.longitude,
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
     });
   }
   return results.slice(0, 8);
