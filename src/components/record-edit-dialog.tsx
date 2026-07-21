@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Calendar, X } from 'lucide-react';
 import { MOOD_OPTIONS } from '@/lib/moods';
 import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
+import { LocationEditor, type LocationDraft } from './location-editor';
 import { RoleAvatar } from './role-avatar';
 
 interface LoveRecord {
@@ -14,6 +15,13 @@ interface LoveRecord {
   mood_tag: string;
   role?: string;
   record_date: string;
+  locations?: {
+    id: string;
+    name: string;
+    address?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null;
 }
 
 interface RecordEditDialogProps {
@@ -28,11 +36,27 @@ function toDatetimeLocalValue(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function locationFromRecord(record: LoveRecord): LocationDraft {
+  const location = record.locations;
+  return {
+    enabled: Boolean(location?.id),
+    id: location?.id ?? null,
+    name: location?.name ?? '',
+    address: location?.address ?? '',
+    latitude: location?.latitude ?? null,
+    longitude: location?.longitude ?? null,
+    geocoding: false,
+    source: location?.id ? 'search' : 'none',
+  };
+}
+
 export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogProps) {
   const [content, setContent] = useState(record.content || '');
   const [moodTag, setMoodTag] = useState(record.mood_tag || '日常');
   const [role, setRole] = useState(record.role || DEFAULT_ROLE);
   const [recordDateTime, setRecordDateTime] = useState(toDatetimeLocalValue(record.record_date));
+  const [location, setLocation] = useState<LocationDraft>(() => locationFromRecord(record));
+  const [addressQuery, setAddressQuery] = useState(record.locations?.address || record.locations?.name || '');
   const [saving, setSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -51,6 +75,14 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (
+        location.enabled
+        && (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude))
+      ) {
+        alert('请填写有效的纬度和经度，或关闭“保存到地图”。');
+        return;
+      }
+
       const title = content.trim()
         ? content.trim().slice(0, 20) + (content.trim().length > 20 ? '...' : '')
         : '无题';
@@ -64,6 +96,16 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
           mood_tag: moodTag,
           role,
           record_date: new Date(recordDateTime).toISOString(),
+          location: {
+            enabled: location.enabled,
+            id: location.id,
+            name: location.name.trim(),
+            address: (location.address || addressQuery).trim(),
+            latitude: location.latitude,
+            longitude: location.longitude,
+            category: '记忆地点',
+            description: content.trim().slice(0, 50) || '记忆地点',
+          },
         }),
       });
       const json = await res.json();
@@ -139,6 +181,14 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
               }}
             />
           </div>
+
+          <LocationEditor
+            value={location}
+            onChange={setLocation}
+            addressQuery={addressQuery}
+            onAddressQueryChange={setAddressQuery}
+            helperText="可搜索地点自动填充坐标，也可手动修改名称、地址和经纬度；关闭保存后会从空间地图移除。"
+          />
 
           <div>
             <p className="text-xs mb-2 font-medium" style={{ color: '#4A3728' }}>记录角色</p>

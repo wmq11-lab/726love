@@ -4,18 +4,14 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { MAX_IMAGE_SIZE, MAX_IMAGE_SIZE_MB, MAX_IMAGES_PER_RECORD } from '@/lib/upload';
 import { MOOD_OPTIONS } from '@/lib/moods';
 import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
-import {
-  searchPlacesClient,
-  reverseGeocodeClient,
-  resolvePlaceForSave,
-  type PlaceSuggestion,
-} from '@/lib/amap';
+import { reverseGeocodeClient, resolvePlaceForSave } from '@/lib/amap';
 import { compressImageFile } from '@/lib/compress-image';
 import { parsePhotoExif, toDatetimeLocalValue, type PhotoExifInfo } from '@/lib/photo-exif';
 import { BatchUploadPanel } from './batch-upload-panel';
+import { LocationEditor, emptyLocation, type LocationDraft } from './location-editor';
 import { RoleAvatar } from './role-avatar';
 import { TinyHeart } from './puppy-decoration';
-import { Images, MapPin, Loader2, Pencil, Search, Calendar } from 'lucide-react';
+import { Images, Pencil, Calendar } from 'lucide-react';
 
 interface UploadTabProps {
   onSuccess: () => void;
@@ -28,26 +24,6 @@ interface PendingImage {
   preview: string;
   exifInfo: PhotoExifInfo | null;
 }
-
-interface LocationDraft {
-  enabled: boolean;
-  name: string;
-  address: string;
-  latitude: number | null;
-  longitude: number | null;
-  geocoding: boolean;
-  source: 'none' | 'gps' | 'search' | 'manual';
-}
-
-const emptyLocation = (): LocationDraft => ({
-  enabled: false,
-  name: '',
-  address: '',
-  latitude: null,
-  longitude: null,
-  geocoding: false,
-  source: 'none',
-});
 
 function nowDatetimeLocal(): string {
   return toDatetimeLocalValue(new Date());
@@ -65,17 +41,11 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
   const [success, setSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [addressQuery, setAddressQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<PlaceSuggestion[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [recordDateTime, setRecordDateTime] = useState(nowDatetimeLocal);
   const [dateFromExif, setDateFromExif] = useState(false);
   const [dateTouched, setDateTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const geocodeAbortRef = useRef<AbortController | null>(null);
-  const searchAbortRef = useRef<AbortController | null>(null);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const locationBoxRef = useRef<HTMLDivElement>(null);
 
   const moods = MOOD_OPTIONS;
   const modeSwitchDisabled = uploading || batchBusy;
@@ -196,99 +166,6 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
       }
       return next;
     });
-  };
-
-  const searchAddress = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    searchAbortRef.current?.abort();
-    const controller = new AbortController();
-    searchAbortRef.current = controller;
-    setSearching(true);
-    try {
-      let data = await searchPlacesClient(query);
-      if (data.length === 0) {
-        try {
-          const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(query.trim())}`, {
-            signal: AbortSignal.timeout(10_000),
-          });
-          const json = (await res.json()) as { success?: boolean; data?: PlaceSuggestion[] };
-          if (json.success && Array.isArray(json.data)) data = json.data;
-        } catch {
-          // 浏览器端已调高德；服务端仅作补充
-        }
-      }
-      if (controller.signal.aborted) return;
-      setSearchResults(data);
-      setShowSuggestions(data.length > 0);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setSearchResults([]);
-        setShowSuggestions(false);
-      }
-    } finally {
-      if (!controller.signal.aborted) setSearching(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    if (!addressQuery.trim()) {
-      setSearchResults([]);
-      setShowSuggestions(false);
-      return;
-    }
-    searchDebounceRef.current = setTimeout(() => searchAddress(addressQuery), 350);
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    };
-  }, [addressQuery, searchAddress]);
-
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (locationBoxRef.current && !locationBoxRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, []);
-
-  const selectPlace = async (place: PlaceSuggestion) => {
-    let latitude = place.latitude;
-    let longitude = place.longitude;
-    if (latitude == null || longitude == null) {
-      const geocodeQuery = [place.district, place.name, place.address].filter(Boolean).join('') || place.name;
-      const resolved = await resolvePlaceForSave(geocodeQuery);
-      if (resolved?.latitude != null && resolved.longitude != null) {
-        latitude = resolved.latitude;
-        longitude = resolved.longitude;
-      }
-    }
-
-    const fullAddress = [place.district, place.address].filter(Boolean).join('') || place.name;
-    setLocation({
-      enabled: true,
-      name: place.name,
-      address: fullAddress,
-      latitude,
-      longitude,
-      geocoding: false,
-      source: 'search',
-    });
-    setAddressQuery(fullAddress);
-    setShowSuggestions(false);
-    setSearchResults([]);
-  };
-
-  const markManualEdit = () => {
-    setLocation((prev) => ({
-      ...prev,
-      enabled: prev.enabled || !!(prev.latitude && prev.longitude) || !!prev.address.trim(),
-      source: prev.source === 'gps' ? 'manual' : (prev.source === 'none' ? 'manual' : prev.source),
-    }));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -561,137 +438,13 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
           </p>
         </div>
 
-        {/* 记忆地点：自动识别 + 手动搜索 */}
-        <div
-          ref={locationBoxRef}
-          className="mb-4 rounded-xl p-4 space-y-3"
-          style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8D5C4' }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin size={16} style={{ color: '#C4956A' }} />
-              <span className="text-sm font-medium" style={{ color: '#4A3728' }}>记忆地点</span>
-              {location.geocoding && (
-                <span className="flex items-center gap-1 text-xs" style={{ color: '#A0846C' }}>
-                  <Loader2 size={12} className="animate-spin" /> 识别中...
-                </span>
-              )}
-              {location.source === 'gps' && !location.geocoding && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: '#FFF8F0', color: '#C4956A' }}>来自照片</span>
-              )}
-            </div>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: '#A0846C' }}>
-              <input
-                type="checkbox"
-                checked={location.enabled}
-                onChange={(e) => setLocation((prev) => ({ ...prev, enabled: e.target.checked }))}
-                className="accent-[#C4956A]"
-              />
-              保存到地图
-            </label>
-          </div>
-
-          {/* 地址搜索框 */}
-          <div className="relative">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#A0846C' }} />
-              <input
-                type="text"
-                placeholder="搜索地址或地点，如「星巴克 王府井」"
-                value={addressQuery}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setAddressQuery(val);
-                  setShowSuggestions(true);
-                  setLocation((prev) => ({
-                    ...prev,
-                    address: val,
-                    enabled: val.trim() ? true : prev.enabled,
-                    source: prev.source === 'gps' && !val.trim() ? 'gps' : (val.trim() ? 'manual' : prev.source),
-                  }));
-                }}
-                onFocus={() => searchResults.length > 0 && setShowSuggestions(true)}
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm outline-none"
-                style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5C4', color: '#4A3728' }}
-              />
-              {searching && (
-                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin" style={{ color: '#A0846C' }} />
-              )}
-            </div>
-
-            {showSuggestions && searchResults.length > 0 && (
-              <ul
-                className="absolute z-20 left-0 right-0 mt-1 rounded-xl overflow-hidden shadow-md max-h-48 overflow-y-auto"
-                style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8D5C4' }}
-              >
-                {searchResults.map((place) => (
-                  <li key={place.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectPlace(place)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-[#FFF8F0] transition-colors"
-                    >
-                      <p className="text-sm truncate" style={{ color: '#4A3728' }}>{place.name}</p>
-                      <p className="text-[10px] truncate mt-0.5" style={{ color: '#A0846C' }}>
-                        {[place.district, place.address].filter(Boolean).join(' · ')}
-                      </p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <input
-            type="text"
-            placeholder="地点名称（展示用）"
-            value={location.name}
-            onChange={(e) => {
-              markManualEdit();
-              setLocation((prev) => ({ ...prev, enabled: true, name: e.target.value }));
-            }}
-            className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-            style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5C4', color: '#4A3728' }}
+        <div className="mb-4">
+          <LocationEditor
+            value={location}
+            onChange={setLocation}
+            addressQuery={addressQuery}
+            onAddressQueryChange={setAddressQuery}
           />
-
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              step="any"
-              placeholder="纬度"
-              value={location.latitude ?? ''}
-              onChange={(e) => {
-                markManualEdit();
-                setLocation((prev) => ({
-                  ...prev,
-                  enabled: true,
-                  latitude: e.target.value ? parseFloat(e.target.value) : null,
-                }));
-              }}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-              style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5C4', color: '#4A3728' }}
-            />
-            <input
-              type="number"
-              step="any"
-              placeholder="经度"
-              value={location.longitude ?? ''}
-              onChange={(e) => {
-                markManualEdit();
-                setLocation((prev) => ({
-                  ...prev,
-                  enabled: true,
-                  longitude: e.target.value ? parseFloat(e.target.value) : null,
-                }));
-              }}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-              style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5C4', color: '#4A3728' }}
-            />
-          </div>
-
-          <p className="text-[10px]" style={{ color: '#A0846C' }}>
-            上传带 GPS 的照片会自动回填地址；也可搜索或手动填写地点信息
-          </p>
         </div>
 
         <div className="mb-4">
