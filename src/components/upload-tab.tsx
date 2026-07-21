@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MAX_IMAGE_SIZE, MAX_IMAGE_SIZE_MB, MAX_IMAGES_PER_RECORD } from '@/lib/upload';
+import {
+  MAX_IMAGE_SIZE,
+  MAX_IMAGE_SIZE_MB,
+  MAX_VIDEO_SIZE,
+  MAX_VIDEO_SIZE_MB,
+  MAX_MEDIA_PER_RECORD,
+  MEDIA_ACCEPT,
+} from '@/lib/upload';
 import { MOOD_OPTIONS } from '@/lib/moods';
 import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
 import { reverseGeocodeClient, resolvePlaceForSave } from '@/lib/amap';
 import { compressImageFile } from '@/lib/compress-image';
 import { parsePhotoExif, toDatetimeLocalValue, type PhotoExifInfo } from '@/lib/photo-exif';
+import { isAllowedMediaFile, isImageFile, isVideoFile } from '@/lib/media';
 import { BatchUploadPanel } from './batch-upload-panel';
 import { LocationEditor, emptyLocation, type LocationDraft } from './location-editor';
 import { RoleAvatar } from './role-avatar';
@@ -18,10 +26,11 @@ interface UploadTabProps {
   onNavigateHome: () => void;
 }
 
-interface PendingImage {
+interface PendingMedia {
   id: string;
   file: File;
   preview: string;
+  kind: 'image' | 'video';
   exifInfo: PhotoExifInfo | null;
 }
 
@@ -35,7 +44,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
   const [content, setContent] = useState('');
   const [moodTag, setMoodTag] = useState('日常');
   const [role, setRole] = useState<string>(DEFAULT_ROLE);
-  const [images, setImages] = useState<PendingImage[]>([]);
+  const [images, setImages] = useState<PendingMedia[]>([]);
   const [location, setLocation] = useState<LocationDraft>(emptyLocation);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -52,6 +61,10 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
 
   const readPreview = (f: File) =>
     new Promise<string>((resolve, reject) => {
+      if (f.type.startsWith('video/')) {
+        resolve(URL.createObjectURL(f));
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (ev) => resolve(ev.target?.result as string);
       reader.onerror = () => reject(new Error('预览读取失败'));
@@ -86,10 +99,12 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
           enabled: true,
           latitude: lat,
           longitude: lng,
-          name: prev.name || '照片拍摄地',
+          name: prev.name || '',
+          address: prev.address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
           geocoding: false,
           source: 'gps',
         }));
+        setAddressQuery((prev) => prev || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -98,6 +113,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
           enabled: true,
           latitude: lat,
           longitude: lng,
+          address: prev.address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
           geocoding: false,
           source: 'gps',
         }));
@@ -106,40 +122,52 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
   }, []);
 
   const addFiles = async (fileList: FileList | File[]) => {
-    const incoming = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
-    if (incoming.length === 0) return;
+    const incoming = Array.from(fileList).filter(isAllowedMediaFile);
+    if (incoming.length === 0) {
+      alert('请选择图片或视频文件（支持 mp4 / webm / mov）');
+      return;
+    }
 
-    const remaining = MAX_IMAGES_PER_RECORD - images.length;
+    const remaining = MAX_MEDIA_PER_RECORD - images.length;
     if (remaining <= 0) {
-      alert(`每条记忆最多上传 ${MAX_IMAGES_PER_RECORD} 张图片`);
+      alert(`每条记忆最多上传 ${MAX_MEDIA_PER_RECORD} 个文件`);
       return;
     }
 
     const toAdd = incoming.slice(0, remaining);
     if (incoming.length > remaining) {
-      alert(`最多还能添加 ${remaining} 张，已自动选取前 ${remaining} 张`);
+      alert(`最多还能添加 ${remaining} 个，已自动选取前 ${remaining} 个`);
     }
 
-    const oversized = toAdd.find((f) => f.size > MAX_IMAGE_SIZE);
-    if (oversized) {
-      alert(`图片过大（${(oversized.size / 1024 / 1024).toFixed(1)}MB），请选择 ${MAX_IMAGE_SIZE_MB}MB 以内的图片`);
-      return;
+    for (const f of toAdd) {
+      if (isVideoFile(f) && f.size > MAX_VIDEO_SIZE) {
+        alert(`视频过大（${(f.size / 1024 / 1024).toFixed(1)}MB），请选择 ${MAX_VIDEO_SIZE_MB}MB 以内的视频`);
+        return;
+      }
+      if (isImageFile(f) && f.size > MAX_IMAGE_SIZE) {
+        alert(`图片过大（${(f.size / 1024 / 1024).toFixed(1)}MB），请选择 ${MAX_IMAGE_SIZE_MB}MB 以内的图片`);
+        return;
+      }
     }
 
-    const newImages = await Promise.all(
-      toAdd.map(async (file) => ({
-        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        file,
-        preview: await readPreview(file),
-        exifInfo: await parsePhotoExif(file),
-      })),
+    const newItems = await Promise.all(
+      toAdd.map(async (file) => {
+        const kind = isVideoFile(file) ? 'video' as const : 'image' as const;
+        return {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          file,
+          preview: await readPreview(file),
+          kind,
+          exifInfo: kind === 'image' ? await parsePhotoExif(file) : null,
+        };
+      }),
     );
 
-    setImages((prev) => [...prev, ...newImages]);
+    setImages((prev) => [...prev, ...newItems]);
 
     // 从新增图片中找第一张带拍摄时间的，自动回填日期
     if (!dateTouched) {
-      const datedImage = newImages.find((img) => img.exifInfo?.dateTime);
+      const datedImage = newItems.find((img) => img.exifInfo?.dateTime);
       if (datedImage?.exifInfo?.dateTime) {
         setRecordDateTime(toDatetimeLocalValue(new Date(datedImage.exifInfo.dateTime)));
         setDateFromExif(true);
@@ -147,7 +175,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
     }
 
     // 从新增图片中找第一张带 GPS 的，触发地点识别
-    const gpsImage = newImages.find((img) => img.exifInfo?.latitude && img.exifInfo?.longitude);
+    const gpsImage = newItems.find((img) => img.exifInfo?.latitude && img.exifInfo?.longitude);
     if (gpsImage?.exifInfo?.latitude && gpsImage.exifInfo?.longitude) {
       reverseGeocode(gpsImage.exifInfo.latitude, gpsImage.exifInfo.longitude);
     }
@@ -157,6 +185,10 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
 
   const removeImage = (id: string) => {
     setImages((prev) => {
+      const target = prev.find((img) => img.id === id);
+      if (target?.kind === 'video' && target.preview.startsWith('blob:')) {
+        URL.revokeObjectURL(target.preview);
+      }
       const next = prev.filter((img) => img.id !== id);
       const hasGps = next.some((img) => img.exifInfo?.latitude && img.exifInfo?.longitude);
       // 仅当地点来自 GPS 自动识别且已无 GPS 图片时清空
@@ -260,17 +292,19 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
       const recordId = recordJson.data.id;
 
       for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        const compressed = await compressImageFile(img.file);
+        const item = images[i];
+        const fileToUpload = item.kind === 'image'
+          ? await compressImageFile(item.file)
+          : item.file;
         const formData = new FormData();
-        formData.append('file', compressed);
+        formData.append('file', fileToUpload);
         formData.append('record_id', recordId);
-        formData.append('template_style', 'simple');
+        formData.append('template_style', item.kind === 'video' ? 'video' : 'simple');
         formData.append('sort_order', String(i));
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
         const uploadJson = await safeJson(uploadRes);
         if (!uploadJson.success) {
-          alert(`第 ${i + 1} 张图片上传失败: ${uploadJson.error}`);
+          alert(`第 ${i + 1} 个文件上传失败: ${uploadJson.error}`);
           return;
         }
       }
@@ -346,7 +380,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept={MEDIA_ACCEPT}
           multiple
           className="hidden"
           onChange={(e) => { if (e.target.files) addFiles(e.target.files); }}
@@ -357,7 +391,20 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
             <div className="grid grid-cols-3 gap-2">
               {images.map((img) => (
                 <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden" style={{ border: '2px solid #E8D5C4' }}>
-                  <img src={img.preview} alt="预览" className="w-full h-full object-cover" />
+                  {img.kind === 'video' ? (
+                    <video
+                      src={img.preview}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img src={img.preview} alt="预览" className="w-full h-full object-cover" />
+                  )}
+                  {img.kind === 'video' && (
+                    <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded" style={{ backgroundColor: 'rgba(74,55,40,0.85)', color: '#fff' }}>视频</span>
+                  )}
                   {img.exifInfo?.latitude && (
                     <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded" style={{ backgroundColor: 'rgba(196,149,106,0.85)', color: '#fff' }}>GPS</span>
                   )}
@@ -370,7 +417,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
                   </button>
                 </div>
               ))}
-              {images.length < MAX_IMAGES_PER_RECORD && (
+              {images.length < MAX_MEDIA_PER_RECORD && (
                 <button
                   onClick={() => fileRef.current?.click()}
                   className="aspect-square rounded-xl flex flex-col items-center justify-center text-xs"
@@ -382,7 +429,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
               )}
             </div>
             <p className="text-xs text-center" style={{ color: '#A0846C' }}>
-              已选 {images.length}/{MAX_IMAGES_PER_RECORD} 张
+              已选 {images.length}/{MAX_MEDIA_PER_RECORD} 个（图片/视频）
             </p>
           </div>
         ) : (
@@ -398,12 +445,12 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
             }}
           >
             <div className="text-3xl mb-2">📸</div>
-            <p className="text-sm" style={{ color: '#C4956A' }}>拖入照片或点击上传</p>
+            <p className="text-sm" style={{ color: '#C4956A' }}>拖入照片/视频或点击上传</p>
             <p className="text-xs mt-1" style={{ color: '#A0846C' }}>
-              支持多张 · 最多 {MAX_IMAGES_PER_RECORD} 张 · 单张最大 {MAX_IMAGE_SIZE_MB}MB
+              最多 {MAX_MEDIA_PER_RECORD} 个 · 图片 ≤{MAX_IMAGE_SIZE_MB}MB · 视频 ≤{MAX_VIDEO_SIZE_MB}MB
             </p>
             <p className="text-xs mt-1" style={{ color: '#A0846C' }}>
-              带 GPS 的照片将自动识别拍摄地点
+              支持 mp4 / webm / mov；带 GPS 的照片将自动识别拍摄地点
             </p>
           </div>
         )}

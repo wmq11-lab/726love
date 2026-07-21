@@ -3,6 +3,7 @@
 import { MapPin, Calendar, Trash2, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { getMoodEmoji } from '@/lib/moods';
+import { isVideoMedia } from '@/lib/media';
 import { RoleAvatar } from './role-avatar';
 import { ImagePreviewLightbox } from './image-preview-lightbox';
 
@@ -21,7 +22,14 @@ interface LoveRecord {
     latitude?: number | null;
     longitude?: number | null;
   } | null;
-  record_images?: Array<{ id: string; storage_key: string; template_style: string; url?: string; fullUrl?: string }>;
+  record_images?: Array<{
+    id: string;
+    storage_key: string;
+    template_style: string;
+    media_type?: string;
+    url?: string;
+    fullUrl?: string;
+  }>;
 }
 
 interface RecordCardProps {
@@ -41,6 +49,7 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
   const previewImages = images.map((img) => ({
     id: img.id,
     url: img.fullUrl || img.url!,
+    mediaType: (isVideoMedia(img) ? 'video' : 'image') as 'image' | 'video',
   }));
 
   const dateObj = new Date(record.record_date);
@@ -106,7 +115,9 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
       >
         {images.length > 0 ? (
           <div className={`grid gap-1 p-1 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`} style={{ minHeight: 200, maxHeight: 320 }}>
-            {images.slice(0, 4).map((img, idx) => (
+            {images.slice(0, 4).map((img, idx) => {
+              const video = isVideoMedia(img);
+              return (
               <button
                 key={img.id}
                 type="button"
@@ -120,19 +131,41 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
                   </div>
                 )}
                 {!errorIds.has(img.id) && (
-                  <img
-                    src={img.url}
-                    alt={record.title}
-                    loading={idx === 0 ? 'eager' : 'lazy'}
-                    decoding="async"
-                    className={`w-full h-full object-cover transition-opacity group-hover:opacity-90 ${loadedIds.has(img.id) ? '' : 'opacity-0'}`}
-                    style={{ minHeight: images.length === 1 ? 200 : 96 }}
-                    onLoad={() => setLoadedIds((prev) => new Set(prev).add(img.id))}
-                    onError={() => setErrorIds((prev) => new Set(prev).add(img.id))}
-                  />
+                  video ? (
+                    <video
+                      src={img.url}
+                      className={`w-full h-full object-cover transition-opacity group-hover:opacity-90 ${loadedIds.has(img.id) ? '' : 'opacity-0'}`}
+                      style={{ minHeight: images.length === 1 ? 200 : 96 }}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      onLoadedData={() => setLoadedIds((prev) => new Set(prev).add(img.id))}
+                      onError={() => setErrorIds((prev) => new Set(prev).add(img.id))}
+                    />
+                  ) : (
+                    <img
+                      src={img.url}
+                      alt={record.title}
+                      loading={idx === 0 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      className={`w-full h-full object-cover transition-opacity group-hover:opacity-90 ${loadedIds.has(img.id) ? '' : 'opacity-0'}`}
+                      style={{ minHeight: images.length === 1 ? 200 : 96 }}
+                      onLoad={() => setLoadedIds((prev) => new Set(prev).add(img.id))}
+                      onError={() => setErrorIds((prev) => new Set(prev).add(img.id))}
+                    />
+                  )
+                )}
+                {video && (
+                  <span
+                    className="absolute bottom-1 left-1 text-[9px] px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: 'rgba(74,55,40,0.8)', color: '#fff' }}
+                  >
+                    ▶ 视频
+                  </span>
                 )}
               </button>
-            ))}
+              );
+            })}
             {images.length > 4 && (
               <button
                 type="button"
@@ -140,7 +173,7 @@ export function RecordCard({ record, showImages = true, onEdit, onDelete }: Reco
                 className="col-span-2 text-center text-[10px] py-2 cursor-pointer hover:opacity-80 transition-opacity"
                 style={{ color: '#C4956A' }}
               >
-                +{images.length - 4} 张更多 · 点击查看
+                +{images.length - 4} 个更多 · 点击查看
               </button>
             )}
           </div>

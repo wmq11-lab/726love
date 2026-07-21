@@ -5,9 +5,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   allowedDevOrigins: ['*.dev.coze.site'],
   experimental: {
-    proxyClientMaxBodySize: '20mb',
+    proxyClientMaxBodySize: '50mb',
     serverActions: {
-      bodySizeLimit: '20mb',
+      bodySizeLimit: '50mb',
     },
   },
   images: {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { PuppyDecoration } from './puppy-decoration';
 import { getMoodEmoji } from '@/lib/moods';
+import { isVideoMedia } from '@/lib/media';
 import { RoleAvatar } from './role-avatar';
 
 export interface OnThisDayRecord {
@@ -13,7 +14,13 @@ export interface OnThisDayRecord {
   record_date: string;
   yearsAgo: number;
   locations?: { name: string } | null;
-  record_images?: Array<{ id: string; url?: string }>;
+  record_images?: Array<{
+    id: string;
+    url?: string;
+    storage_key?: string;
+    template_style?: string;
+    media_type?: string;
+  }>;
 }
 
 interface OnThisDaySectionProps {
@@ -103,15 +110,27 @@ export function OnThisDaySection({ onEdit }: OnThisDaySectionProps) {
                 {images.length > 0 && (
                   <div className={`grid gap-1 mb-2 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
                     {images.slice(0, 3).map((img) => (
-                      <img
-                        key={img.id}
-                        src={img.url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full aspect-square object-cover rounded-lg"
-                        style={{ border: '1px solid #F0E3D5' }}
-                      />
+                      isVideoMedia(img) ? (
+                        <video
+                          key={img.id}
+                          src={img.url}
+                          className="w-full aspect-square object-cover rounded-lg"
+                          style={{ border: '1px solid #F0E3D5' }}
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        <img
+                          key={img.id}
+                          src={img.url}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full aspect-square object-cover rounded-lg"
+                          style={{ border: '1px solid #F0E3D5' }}
+                        />
+                      )
                     ))}
                   </div>
                 )}

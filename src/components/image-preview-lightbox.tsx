@@ -4,13 +4,14 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface PreviewImage {
+interface PreviewMedia {
   id: string;
   url: string;
+  mediaType?: 'image' | 'video';
 }
 
 interface ImagePreviewLightboxProps {
-  images: PreviewImage[];
+  images: PreviewMedia[];
   initialIndex: number;
   onClose: () => void;
 }
@@ -19,14 +20,14 @@ export function ImagePreviewLightbox({ images, initialIndex, onClose }: ImagePre
   const [index, setIndex] = useState(initialIndex);
   const [mounted, setMounted] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
+  const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
 
   const syncFrameSize = useCallback(() => {
-    const img = imgRef.current;
+    const media = mediaRef.current;
     const frame = frameRef.current;
-    if (!img || !frame) return;
-    frame.style.width = `${img.offsetWidth}px`;
-    frame.style.height = `${img.offsetHeight}px`;
+    if (!media || !frame) return;
+    frame.style.width = `${media.offsetWidth}px`;
+    frame.style.height = `${media.offsetHeight}px`;
   }, []);
 
   const goPrev = useCallback(() => {
@@ -71,34 +72,49 @@ export function ImagePreviewLightbox({ images, initialIndex, onClose }: ImagePre
   const current = images[index];
   if (!mounted || !current) return null;
 
+  const isVideo = current.mediaType === 'video';
+
   return createPortal(
     <div
       className="fixed inset-0 z-20 flex items-center justify-center"
       style={{ paddingTop: '68px', paddingBottom: '16px' }}
       onClick={onClose}
     >
-      {/* 半透明遮罩：与主题色一致，避免纯黑底 */}
       <div
         className="absolute inset-0 -z-10"
         style={{ backgroundColor: 'rgba(74, 55, 40, 0.72)' }}
         aria-hidden
       />
 
-      {/* 紧贴图片尺寸的容器，按钮相对图片定位 */}
       <div
         ref={frameRef}
         className="relative animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <img
-          ref={imgRef}
-          src={current.url}
-          alt=""
-          onLoad={syncFrameSize}
-          className="block max-w-[min(calc(100vw-80px),1100px)] max-h-[calc(100vh-100px)] w-auto h-auto rounded-lg select-none"
-          style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
-          draggable={false}
-        />
+        {isVideo ? (
+          <video
+            key={current.id}
+            ref={mediaRef as React.RefObject<HTMLVideoElement>}
+            src={current.url}
+            controls
+            playsInline
+            autoPlay
+            onLoadedData={syncFrameSize}
+            className="block max-w-[min(calc(100vw-80px),1100px)] max-h-[calc(100vh-100px)] w-auto h-auto rounded-lg"
+            style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.35)', backgroundColor: '#1a120c' }}
+          />
+        ) : (
+          <img
+            key={current.id}
+            ref={mediaRef as React.RefObject<HTMLImageElement>}
+            src={current.url}
+            alt=""
+            onLoad={syncFrameSize}
+            className="block max-w-[min(calc(100vw-80px),1100px)] max-h-[calc(100vh-100px)] w-auto h-auto rounded-lg select-none"
+            style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
+            draggable={false}
+          />
+        )}
 
         <button
           type="button"

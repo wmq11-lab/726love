@@ -129,7 +129,7 @@ function makeInitialLocations(groups: PhotoGroup[]): Record<string, BatchLocatio
       group.id,
       {
         enabled: group.latitude != null && group.longitude != null,
-        name: group.latitude != null && group.longitude != null ? '照片拍摄地' : '',
+        name: '',
         address: '',
         latitude: group.latitude,
         longitude: group.longitude,
@@ -141,7 +141,7 @@ function makeInitialLocations(groups: PhotoGroup[]): Record<string, BatchLocatio
 
 function buildBatchTitle(group: PhotoGroup, location?: BatchLocationDraft): string {
   const locationName = location?.enabled
-    ? (location.name.trim() || location.address.trim() || '照片拍摄地')
+    ? (location.name.trim() || location.address.trim() || '含 GPS')
     : '未定位';
   return `${formatShortDate(group.recordDate)} · ${locationName} · ${group.photos.length}张照片`.slice(0, 120);
 }
@@ -219,14 +219,14 @@ export function BatchUploadPanel({ onSuccess, onNavigateHome, onBusyChange }: Ba
           [group.id]: {
             ...(prev[group.id] ?? {
               enabled: true,
-              name: '照片拍摄地',
+              name: '',
               address: '',
               latitude: group.latitude,
               longitude: group.longitude,
               geocoding: true,
             }),
             enabled: true,
-            name: data?.name || prev[group.id]?.name || '照片拍摄地',
+            name: data?.name || prev[group.id]?.name || '',
             address: data?.address || prev[group.id]?.address || '',
             latitude: group.latitude,
             longitude: group.longitude,
@@ -240,7 +240,7 @@ export function BatchUploadPanel({ onSuccess, onNavigateHome, onBusyChange }: Ba
           [group.id]: {
             ...(prev[group.id] ?? {
               enabled: true,
-              name: '照片拍摄地',
+              name: '',
               address: '',
               latitude: group.latitude,
               longitude: group.longitude,
@@ -327,8 +327,8 @@ export function BatchUploadPanel({ onSuccess, onNavigateHome, onBusyChange }: Ba
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: location.name.trim() || location.address.slice(0, 20) || '照片拍摄地',
-        address: location.address.trim(),
+        name: location.name.trim() || location.address.slice(0, 20) || 'GPS 地点',
+        address: location.address.trim() || `${location.latitude}, ${location.longitude}`,
         latitude: location.latitude,
         longitude: location.longitude,
         category: '记忆地点',
@@ -578,8 +578,8 @@ export function BatchUploadPanel({ onSuccess, onNavigateHome, onBusyChange }: Ba
                       </span>
                     ) : location?.enabled ? (
                       <>
-                        <p className="truncate" style={{ color: '#4A3728' }}>{location.name || '照片拍摄地'}</p>
-                        {location.address && <p className="text-[10px] line-clamp-2">{location.address}</p>}
+                        <p className="truncate" style={{ color: '#4A3728' }}>{location.name || location.address || '识别中…'}</p>
+                        {location.address && location.name && <p className="text-[10px] line-clamp-2">{location.address}</p>}
                       </>
                     ) : (
                       <span>没有 GPS 信息，将只按时间保存</span>

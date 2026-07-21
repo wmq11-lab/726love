@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { buildThumbUrl } from '@/lib/storage';
+import { isVideoMedia } from '@/lib/media';
 import { logger } from '@/lib/logger';
 import { calcTogetherDays, LOVE_TOGETHER_DATE, parseDateOnly } from '@/lib/love-dates';
 
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     if (periodIds.length > 0) {
       const { data: images } = await client
         .from('record_images')
-        .select('id, storage_key, record_id, sort_order, created_at')
+        .select('id, storage_key, record_id, sort_order, created_at, template_style')
         .in('record_id', periodIds)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
         if (highlightPhotos.length >= 9) break;
         const key = img.storage_key as string;
         if (!key) continue;
+        if (isVideoMedia(img as { storage_key?: string; template_style?: string })) continue;
         const url = key.startsWith('data:') ? key : buildThumbUrl(key, 480);
         highlightPhotos.push({ id: img.id, url, record_id: img.record_id });
       }

@@ -1,4 +1,14 @@
-import { buildThumbUrl, buildFullImageUrl } from '@/lib/storage';
+import { buildThumbUrl, buildFullImageUrl, generateImageUrl } from '@/lib/storage';
+import { isVideoMedia } from '@/lib/media';
+
+type RawImage = {
+  id: string;
+  storage_key: string;
+  sort_order?: number;
+  template_style?: string | null;
+  media_type?: string | null;
+  [key: string]: unknown;
+};
 
 type RawRecord = {
   id: string;
@@ -6,28 +16,55 @@ type RawRecord = {
   mood_tag?: string;
   location_id?: string | null;
   locations?: { id: string; name: string } | null;
-  record_images?: Array<{ id: string; storage_key: string; sort_order?: number }>;
+  record_images?: RawImage[];
   [key: string]: unknown;
 };
 
-/** 为记录列表补充图片 URL：列表用缩略图，灯箱用较大图 */
+async function enrichOneImage(img: RawImage) {
+  const key = img.storage_key;
+  if (!key) return img;
+
+  const video = isVideoMedia(img);
+  if (key.startsWith('data:')) {
+    return {
+      ...img,
+      url: key,
+      fullUrl: key,
+      media_type: video ? 'video' : 'image',
+    };
+  }
+
+  if (video) {
+    const signed = await generateImageUrl(key, 86400);
+    const url = signed || key;
+    return {
+      ...img,
+      url,
+      fullUrl: url,
+      media_type: 'video' as const,
+      template_style: img.template_style || 'video',
+    };
+  }
+
+  return {
+    ...img,
+    url: buildThumbUrl(key, 720),
+    fullUrl: buildFullImageUrl(key, 1600),
+    media_type: 'image' as const,
+  };
+}
+
+/** 为记录列表补充媒体 URL：图片用缩略图，视频用签名直链 */
 export async function enrichRecordsWithImages<T extends RawRecord>(records: T[]) {
-  return records.map((record) => {
-    const sortedImages = [...(record.record_images ?? [])].sort(
-      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-    );
-    const images = sortedImages.map((img) => {
-      const key = img.storage_key;
-      if (!key) return img;
-      if (key.startsWith('data:')) return { ...img, url: key, fullUrl: key };
-      return {
-        ...img,
-        url: buildThumbUrl(key, 720),
-        fullUrl: buildFullImageUrl(key, 1600),
-      };
-    });
-    return { ...record, record_images: images };
-  });
+  return Promise.all(
+    records.map(async (record) => {
+      const sortedImages = [...(record.record_images ?? [])].sort(
+        (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
+      );
+      const images = await Promise.all(sortedImages.map(enrichOneImage));
+      return { ...record, record_images: images };
+    }),
+  );
 }
 
 export function startOfToday(): Date {

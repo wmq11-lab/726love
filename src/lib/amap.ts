@@ -244,42 +244,75 @@ export async function searchPlacesClient(keyword: string): Promise<PlaceSuggesti
   );
 }
 
-/** 浏览器端逆地理编码：经纬度 → 地址 */
+/** 浏览器端逆地理编码：经纬度 → 地址（国内优先高德 JS，失败/海外走服务端全球兜底） */
 export async function reverseGeocodeClient(
   latitude: number,
   longitude: number,
 ): Promise<{ name: string; address: string } | null> {
-  const AMap = await ensureAmap();
+  const { isLikelyInChina, isUsefulPlaceResult } = await import('@/lib/geo-bounds');
 
-  return withTimeout(
-    new Promise<{ name: string; address: string } | null>((resolve, reject) => {
-      AMap.plugin('AMap.Geocoder', () => {
-        try {
-          const geocoder = new AMap.Geocoder();
-          geocoder.getAddress([longitude, latitude], (status, result) => {
-            if (status !== 'complete' || !result?.regeocode) {
-              resolve(null);
-              return;
+  if (isLikelyInChina(latitude, longitude)) {
+    try {
+      const AMap = await ensureAmap();
+      const amapResult = await withTimeout(
+        new Promise<{ name: string; address: string } | null>((resolve, reject) => {
+          AMap.plugin('AMap.Geocoder', () => {
+            try {
+              const geocoder = new AMap.Geocoder();
+              geocoder.getAddress([longitude, latitude], (status, result) => {
+                if (status !== 'complete' || !result?.regeocode) {
+                  resolve(null);
+                  return;
+                }
+                const regeo = result.regeocode;
+                const address = (regeo.formattedAddress || '').trim();
+                if (!address || address === '[]') {
+                  resolve(null);
+                  return;
+                }
+                const poiName = regeo.pois?.[0]?.name;
+                const component = regeo.addressComponent;
+                const city = Array.isArray(component?.city) ? component?.city[0] : component?.city;
+                const district = [component?.township, component?.district, city].filter(Boolean).join('');
+                resolve({
+                  name: (poiName || district || address.slice(0, 40)).trim(),
+                  address,
+                });
+              });
+            } catch (err) {
+              reject(err);
             }
-            const regeo = result.regeocode;
-            const address = regeo.formattedAddress || '';
-            const poiName = regeo.pois?.[0]?.name;
-            const component = regeo.addressComponent;
-            const city = Array.isArray(component?.city) ? component?.city[0] : component?.city;
-            const district = [component?.township, component?.district, city].filter(Boolean).join('');
-            resolve({
-              name: poiName || district || address.slice(0, 20) || '照片拍摄地',
-              address,
-            });
           });
-        } catch (err) {
-          reject(err);
-        }
-      });
-    }),
-    AMAP_PLUGIN_TIMEOUT_MS,
-    '逆地理编码超时',
-  );
+        }),
+        AMAP_PLUGIN_TIMEOUT_MS,
+        '逆地理编码超时',
+      );
+      if (isUsefulPlaceResult(amapResult)) return amapResult;
+    } catch {
+      // 继续走服务端兜底
+    }
+  }
+
+  try {
+    const res = await fetch(
+      `/api/geocode/reverse?lat=${encodeURIComponent(String(latitude))}&lng=${encodeURIComponent(String(longitude))}`,
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    const json = (await res.json()) as {
+      success?: boolean;
+      data?: { name?: string; address?: string };
+    };
+    if (json.success && isUsefulPlaceResult(json.data || null)) {
+      return {
+        name: (json.data!.name || '').trim(),
+        address: (json.data!.address || '').trim(),
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 /** 浏览器端地理编码：地址 → 坐标 */

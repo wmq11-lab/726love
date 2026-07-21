@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { buildThumbUrl } from '@/lib/storage';
+import { isVideoMedia } from '@/lib/media';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -25,6 +26,7 @@ function parseLocation(raw: unknown): LocRow | null {
 function resolveMarkerImageUrl(key: string | null | undefined, width = 320): string | null {
   if (!key) return null;
   if (key.startsWith('data:')) {
+    if (key.startsWith('data:video/')) return null;
     return key.length <= 8000 ? key : null;
   }
   return buildThumbUrl(key, width);
@@ -37,7 +39,7 @@ export async function GET() {
 
     const { data, error } = await client
       .from('love_records')
-      .select('id, title, content, record_date, mood_tag, locations(*), record_images(id, storage_key, sort_order)')
+      .select('id, title, content, record_date, mood_tag, locations(*), record_images(id, storage_key, sort_order, template_style)')
       .not('location_id', 'is', null)
       .order('record_date', { ascending: false });
 
@@ -72,9 +74,11 @@ export async function GET() {
         );
 
         const images: Array<{ id: string; url: string }> = [];
-        for (const img of sortedImages.slice(0, 6)) {
+        for (const img of sortedImages) {
+          if (isVideoMedia(img as { storage_key?: string; template_style?: string })) continue;
           const url = resolveMarkerImageUrl(img.storage_key as string);
           if (url) images.push({ id: img.id, url });
+          if (images.length >= 6) break;
         }
 
         const recordItem = {
