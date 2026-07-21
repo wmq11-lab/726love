@@ -14,7 +14,13 @@ interface LoveRecord {
   role?: string;
   record_date: string;
   tags: string[];
-  locations?: { id: string; name: string; address?: string } | null;
+  locations?: {
+    id: string;
+    name: string;
+    address?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null;
   record_images?: Array<{ id: string; storage_key: string; template_style: string; url?: string; fullUrl?: string }>;
 }
 
