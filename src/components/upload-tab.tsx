@@ -7,31 +7,26 @@ import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
 import {
   searchPlacesClient,
   reverseGeocodeClient,
-  geocodeAddressClient,
   resolvePlaceForSave,
   type PlaceSuggestion,
 } from '@/lib/amap';
 import { compressImageFile } from '@/lib/compress-image';
+import { parsePhotoExif, toDatetimeLocalValue, type PhotoExifInfo } from '@/lib/photo-exif';
+import { BatchUploadPanel } from './batch-upload-panel';
 import { RoleAvatar } from './role-avatar';
 import { TinyHeart } from './puppy-decoration';
-import { MapPin, Loader2, Search, Calendar } from 'lucide-react';
+import { Images, MapPin, Loader2, Pencil, Search, Calendar } from 'lucide-react';
 
 interface UploadTabProps {
   onSuccess: () => void;
   onNavigateHome: () => void;
 }
 
-interface ExifInfo {
-  dateTime?: string;
-  latitude?: number;
-  longitude?: number;
-}
-
 interface PendingImage {
   id: string;
   file: File;
   preview: string;
-  exifInfo: ExifInfo | null;
+  exifInfo: PhotoExifInfo | null;
 }
 
 interface LocationDraft {
@@ -54,21 +49,13 @@ const emptyLocation = (): LocationDraft => ({
   source: 'none',
 });
 
-function gpsToDecimal(gps: number[], ref: string): number {
-  const decimal = gps[0] + gps[1] / 60 + gps[2] / 3600;
-  return (ref === 'S' || ref === 'W') ? -decimal : decimal;
-}
-
-function toDatetimeLocalValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function nowDatetimeLocal(): string {
   return toDatetimeLocalValue(new Date());
 }
 
 export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
+  const [uploadMode, setUploadMode] = useState<'single' | 'batch'>('single');
+  const [batchBusy, setBatchBusy] = useState(false);
   const [content, setContent] = useState('');
   const [moodTag, setMoodTag] = useState('日常');
   const [role, setRole] = useState<string>(DEFAULT_ROLE);
@@ -91,28 +78,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
   const locationBoxRef = useRef<HTMLDivElement>(null);
 
   const moods = MOOD_OPTIONS;
-
-  const parseExif = async (f: File): Promise<ExifInfo | null> => {
-    try {
-      const exifr = await import('exifr');
-      const data = await exifr.default.parse(f, {
-        pick: ['DateTimeOriginal', 'GPSLatitude', 'GPSLongitude', 'GPSLatitudeRef', 'GPSLongitudeRef'],
-      });
-      if (!data) return null;
-      const info: ExifInfo = {};
-      if (data.DateTimeOriginal) {
-        const m = data.DateTimeOriginal.match(/(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
-        if (m) info.dateTime = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
-      }
-      if (data.GPSLatitude && data.GPSLongitude) {
-        info.latitude = gpsToDecimal(data.GPSLatitude, data.GPSLatitudeRef || 'N');
-        info.longitude = gpsToDecimal(data.GPSLongitude, data.GPSLongitudeRef || 'E');
-      }
-      return info;
-    } catch {
-      return null;
-    }
-  };
+  const modeSwitchDisabled = uploading || batchBusy;
 
   const readPreview = (f: File) =>
     new Promise<string>((resolve, reject) => {
@@ -195,7 +161,7 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
         id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         file,
         preview: await readPreview(file),
-        exifInfo: await parseExif(file),
+        exifInfo: await parsePhotoExif(file),
       })),
     );
 
@@ -459,6 +425,46 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
         <h3 className="text-lg text-center mb-4 tracking-wide" style={{ fontFamily: "'ZCOOL KuaiLe', sans-serif", color: '#C4956A' }}>
           记录此刻 💕
         </h3>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setUploadMode('single')}
+            disabled={modeSwitchDisabled}
+            className="py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              backgroundColor: uploadMode === 'single' ? '#C4956A' : '#FFFFFF',
+              color: uploadMode === 'single' ? '#FFFFFF' : '#4A3728',
+              border: `1px solid ${uploadMode === 'single' ? '#C4956A' : '#E8D5C4'}`,
+            }}
+          >
+            <Pencil size={15} />
+            普通记录
+          </button>
+          <button
+            type="button"
+            onClick={() => setUploadMode('batch')}
+            disabled={modeSwitchDisabled}
+            className="py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              backgroundColor: uploadMode === 'batch' ? '#C4956A' : '#FFFFFF',
+              color: uploadMode === 'batch' ? '#FFFFFF' : '#4A3728',
+              border: `1px solid ${uploadMode === 'batch' ? '#C4956A' : '#E8D5C4'}`,
+            }}
+          >
+            <Images size={15} />
+            批量导入
+          </button>
+        </div>
+
+        {uploadMode === 'batch' ? (
+          <BatchUploadPanel
+            onSuccess={onSuccess}
+            onNavigateHome={onNavigateHome}
+            onBusyChange={setBatchBusy}
+          />
+        ) : (
+          <>
 
         <input
           ref={fileRef}
@@ -749,6 +755,8 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
         >
           {uploading ? '保存中...' : success ? '保存成功! 🎉' : '发布记忆'}
         </button>
+          </>
+        )}
       </div>
 
       <div className="flex justify-center"><TinyHeart /></div>
