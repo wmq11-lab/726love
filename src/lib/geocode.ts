@@ -8,14 +8,14 @@ export interface ReverseGeocodeResult {
   provider?: 'amap' | 'bigdatacloud' | 'nominatim';
 }
 
-async function fetchJson(url: string, init?: RequestInit): Promise<Record<string, unknown> | null> {
+async function fetchJson(url: string, init?: RequestInit): Promise<unknown | null> {
   try {
     const res = await fetch(url, {
       ...init,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
-    return (await res.json()) as Record<string, unknown>;
+    return await res.json();
   } catch {
     return null;
   }
@@ -32,9 +32,11 @@ async function reverseGeocodeAmap(
   const location = `${longitude},${latitude}`;
   const url = `https://restapi.amap.com/v3/geocode/regeo?key=${key}&location=${location}&extensions=base`;
   const json = await fetchJson(url);
-  if (!json || json.status !== '1' || !json.regeocode) return null;
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const data = json as Record<string, unknown>;
+  if (data.status !== '1' || !data.regeocode) return null;
 
-  const regeo = json.regeocode as {
+  const regeo = data.regeocode as {
     formatted_address?: string;
     pois?: Array<{ name: string }>;
     addressComponent?: { township?: string; district?: string; city?: string | string[] };
@@ -66,13 +68,14 @@ async function reverseGeocodeBigDataCloud(
     + `&localityLanguage=zh`;
 
   const json = await fetchJson(url);
-  if (!json) return null;
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const data = json as Record<string, unknown>;
 
-  const locality = String(json.locality || '').trim();
-  const city = String(json.city || '').trim();
-  const subdivision = String(json.principalSubdivision || '').trim();
-  const country = String(json.countryName || '').trim();
-  const plusCode = String(json.plusCode || '').trim();
+  const locality = String(data.locality || '').trim();
+  const city = String(data.city || '').trim();
+  const subdivision = String(data.principalSubdivision || '').trim();
+  const country = String(data.countryName || '').trim();
+  const plusCode = String(data.plusCode || '').trim();
 
   const name = locality || city || subdivision || country;
   if (!name) return null;
@@ -102,11 +105,12 @@ async function reverseGeocodeNominatim(
       Accept: 'application/json',
     },
   });
-  if (!json) return null;
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const data = json as Record<string, unknown>;
 
-  const display = String(json.display_name || '').trim();
-  const named = String(json.name || '').trim();
-  const addr = (json.address || {}) as Record<string, string>;
+  const display = String(data.display_name || '').trim();
+  const named = String(data.name || '').trim();
+  const addr = (data.address || {}) as Record<string, string>;
 
   const place =
     named
@@ -194,10 +198,12 @@ export async function searchPlaces(keyword: string): Promise<PlaceSuggestion[]> 
 
   const url = `https://restapi.amap.com/v3/assistant/inputtips?key=${key}&keywords=${encodeURIComponent(keyword.trim())}&datatype=all`;
   const json = await fetchJson(url);
-  if (!json || json.status !== '1' || !Array.isArray(json.tips)) return [];
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return [];
+  const data = json as Record<string, unknown>;
+  if (data.status !== '1' || !Array.isArray(data.tips)) return [];
 
   const results: PlaceSuggestion[] = [];
-  for (const tip of json.tips as Array<{
+  for (const tip of data.tips as Array<{
     id?: string;
     name?: string;
     address?: string;
@@ -219,7 +225,7 @@ export async function searchPlaces(keyword: string): Promise<PlaceSuggestion[]> 
 }
 
 /** 高德地理编码：地址 → 坐标 */
-export async function geocodeAddress(
+export async function geocodeAddressAmap(
   address: string,
 ): Promise<{ name: string; address: string; latitude: number; longitude: number } | null> {
   const key = process.env.NEXT_PUBLIC_AMAP_KEY;
@@ -227,17 +233,62 @@ export async function geocodeAddress(
 
   const url = `https://restapi.amap.com/v3/geocode/geo?key=${key}&address=${encodeURIComponent(address.trim())}`;
   const json = await fetchJson(url);
-  if (!json || json.status !== '1' || !Array.isArray(json.geocodes) || !json.geocodes[0]) return null;
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const data = json as Record<string, unknown>;
+  if (data.status !== '1' || !Array.isArray(data.geocodes) || !data.geocodes[0]) return null;
 
-  const geo = json.geocodes[0] as { location?: string; formatted_address?: string };
+  const geo = data.geocodes[0] as { location?: string; formatted_address?: string };
   const coords = geo.location ? parseLocation(geo.location) : null;
   if (!coords) return null;
 
   const formatted = geo.formatted_address || address.trim();
   return {
-    name: formatted.slice(0, 20),
+    name: formatted.slice(0, 40),
     address: formatted,
     latitude: coords.latitude,
     longitude: coords.longitude,
   };
+}
+
+/** Nominatim 正向地理编码（海外 / 高德失败时兜底） */
+async function geocodeAddressNominatim(
+  address: string,
+): Promise<{ name: string; address: string; latitude: number; longitude: number } | null> {
+  const q = address.trim();
+  if (!q) return null;
+
+  const url =
+    `https://nominatim.openstreetmap.org/search`
+    + `?q=${encodeURIComponent(q)}`
+    + `&format=json&limit=1&accept-language=zh-CN,en`;
+
+  const json = await fetchJson(url, {
+    headers: {
+      'User-Agent': '726love-diary/1.0 (https://github.com/wmq11-lab/726love)',
+      Accept: 'application/json',
+    },
+  });
+  if (!Array.isArray(json) || !json[0]) return null;
+
+  const hit = json[0] as { lat?: string; lon?: string; display_name?: string; name?: string };
+  const latitude = parseFloat(hit.lat || '');
+  const longitude = parseFloat(hit.lon || '');
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const formatted = (hit.display_name || hit.name || q).trim();
+  return {
+    name: (hit.name || formatted.slice(0, 40)).slice(0, 40),
+    address: formatted,
+    latitude,
+    longitude,
+  };
+}
+
+/** 地理编码：高德优先，失败则 Nominatim 全球兜底 */
+export async function geocodeAddress(
+  address: string,
+): Promise<{ name: string; address: string; latitude: number; longitude: number } | null> {
+  const amap = await geocodeAddressAmap(address);
+  if (amap) return amap;
+  return geocodeAddressNominatim(address);
 }

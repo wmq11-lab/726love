@@ -355,7 +355,19 @@ export async function geocodeAddressClient(
   );
 }
 
-/** 发布记忆时解析地址：客户端高德 → 服务端 API，避免无限等待 */
+function hasFiniteCoords(
+  place: { latitude?: number | null; longitude?: number | null } | null | undefined,
+): place is { latitude: number; longitude: number } {
+  return (
+    place != null
+    && typeof place.latitude === 'number'
+    && typeof place.longitude === 'number'
+    && Number.isFinite(place.latitude)
+    && Number.isFinite(place.longitude)
+  );
+}
+
+/** 发布记忆时解析地址：必须得到有效经纬度；高德 → 服务端 → 全球兜底 */
 export async function resolvePlaceForSave(
   address: string,
 ): Promise<PlaceSuggestion | null> {
@@ -363,15 +375,16 @@ export async function resolvePlaceForSave(
   if (!q) return null;
 
   try {
-    const fromAuto = (await searchPlacesClient(q))[0];
-    if (fromAuto) return fromAuto;
+    const tips = await searchPlacesClient(q);
+    const withCoords = tips.find((tip) => hasFiniteCoords(tip));
+    if (withCoords) return withCoords;
   } catch {
     // 继续降级
   }
 
   try {
     const geo = await geocodeAddressClient(q);
-    if (geo) {
+    if (geo && hasFiniteCoords(geo)) {
       return {
         id: `geo_${geo.latitude}_${geo.longitude}`,
         name: geo.name,
@@ -390,7 +403,31 @@ export async function resolvePlaceForSave(
       signal: AbortSignal.timeout(12_000),
     });
     const json = (await res.json()) as { success?: boolean; data?: PlaceSuggestion[] };
-    if (json.success && json.data?.[0]) return json.data[0];
+    const withCoords = json.data?.find((tip) => hasFiniteCoords(tip));
+    if (json.success && withCoords) return withCoords;
+  } catch {
+    // ignore
+  }
+
+  // 服务端正向地理编码（含 Nominatim 全球兜底）
+  try {
+    const res = await fetch(`/api/geocode/forward?q=${encodeURIComponent(q)}`, {
+      signal: AbortSignal.timeout(12_000),
+    });
+    const json = (await res.json()) as {
+      success?: boolean;
+      data?: { name: string; address: string; latitude: number; longitude: number };
+    };
+    if (json.success && json.data && hasFiniteCoords(json.data)) {
+      return {
+        id: `fwd_${json.data.latitude}_${json.data.longitude}`,
+        name: json.data.name,
+        address: json.data.address,
+        district: '',
+        latitude: json.data.latitude,
+        longitude: json.data.longitude,
+      };
+    }
   } catch {
     // ignore
   }

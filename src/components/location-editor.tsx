@@ -115,20 +115,66 @@ export function LocationEditor({
   }, []);
 
   const selectPlace = async (place: PlaceSuggestion) => {
+    setShowSuggestions(false);
+    setSearching(true);
+    updateLocation((prev) => ({
+      ...prev,
+      enabled: true,
+      name: place.name,
+      geocoding: true,
+      source: 'search',
+    }));
+
+    const fullAddress = [place.district, place.address].filter(Boolean).join('') || place.name;
     let latitude = place.latitude;
     let longitude = place.longitude;
-    if (latitude == null || longitude == null) {
-      const geocodeQuery = [place.district, place.name, place.address].filter(Boolean).join('') || place.name;
+
+    if (
+      typeof latitude !== 'number'
+      || typeof longitude !== 'number'
+      || !Number.isFinite(latitude)
+      || !Number.isFinite(longitude)
+    ) {
+      const geocodeQuery = [place.district, place.name, place.address].filter(Boolean).join(' ') || place.name;
       const resolved = await resolvePlaceForSave(geocodeQuery);
-      if (resolved?.latitude != null && resolved.longitude != null) {
+      if (
+        resolved
+        && typeof resolved.latitude === 'number'
+        && typeof resolved.longitude === 'number'
+        && Number.isFinite(resolved.latitude)
+        && Number.isFinite(resolved.longitude)
+      ) {
         latitude = resolved.latitude;
         longitude = resolved.longitude;
       }
     }
 
-    const fullAddress = [place.district, place.address].filter(Boolean).join('') || place.name;
-    updateLocation({
-      ...value,
+    setSearching(false);
+
+    if (
+      typeof latitude !== 'number'
+      || typeof longitude !== 'number'
+      || !Number.isFinite(latitude)
+      || !Number.isFinite(longitude)
+    ) {
+      updateLocation((prev) => ({
+        ...prev,
+        enabled: true,
+        name: place.name,
+        address: fullAddress,
+        latitude: null,
+        longitude: null,
+        geocoding: false,
+        source: 'search',
+      }));
+      onAddressQueryChange(fullAddress);
+      setSearchResults([]);
+      alert('该推荐项暂无精确坐标，请换一个建议，或手动填写经纬度后再保存到地图。');
+      return;
+    }
+
+    updateLocation((prev) => ({
+      ...prev,
       enabled: true,
       name: place.name,
       address: fullAddress,
@@ -136,9 +182,8 @@ export function LocationEditor({
       longitude,
       geocoding: false,
       source: 'search',
-    });
+    }));
     onAddressQueryChange(fullAddress);
-    setShowSuggestions(false);
     setSearchResults([]);
   };
 
@@ -194,6 +239,9 @@ export function LocationEditor({
               updateLocation((prev) => ({
                 ...prev,
                 address: val,
+                // 手动改搜索词后，旧坐标可能已失效，需重新点选或解析
+                latitude: prev.source === 'search' ? null : prev.latitude,
+                longitude: prev.source === 'search' ? null : prev.longitude,
                 enabled: val.trim() ? true : prev.enabled,
                 source: prev.source === 'gps' && !val.trim() ? 'gps' : (val.trim() ? 'manual' : prev.source),
               }));

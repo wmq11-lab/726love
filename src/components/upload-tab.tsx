@@ -229,7 +229,13 @@ export function UploadTab({ onSuccess, onNavigateHome }: UploadTabProps) {
 
       if (locData.enabled && locData.latitude == null && locData.address) {
         const resolved = await resolvePlaceForSave(locData.address);
-        if (resolved) {
+        if (
+          resolved
+          && typeof resolved.latitude === 'number'
+          && typeof resolved.longitude === 'number'
+          && Number.isFinite(resolved.latitude)
+          && Number.isFinite(resolved.longitude)
+        ) {
           locData = {
             ...locData,
             name: locData.name || resolved.name,
