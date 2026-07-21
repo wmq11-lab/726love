@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, X } from 'lucide-react';
 import { MOOD_OPTIONS } from '@/lib/moods';
 import { ROLE_OPTIONS, DEFAULT_ROLE } from '@/lib/roles';
@@ -33,6 +34,19 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
   const [role, setRole] = useState(record.role || DEFAULT_ROLE);
   const [recordDateTime, setRecordDateTime] = useState(toDatetimeLocalValue(record.record_date));
   const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -65,7 +79,7 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
     }
   };
 
-  return (
+  const dialog = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(74,55,40,0.35)' }}
@@ -75,9 +89,16 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
         className="w-full max-w-lg rounded-2xl overflow-hidden animate-fade-in max-h-[90vh] flex flex-col"
         style={{ backgroundColor: '#FFF8F0', border: '1.5px solid #F2C9C9' }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="record-edit-dialog-title"
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F0E3D5' }}>
-          <h3 className="text-base tracking-wide" style={{ fontFamily: "'ZCOOL KuaiLe', sans-serif", color: '#C4956A' }}>
+          <h3
+            id="record-edit-dialog-title"
+            className="text-base tracking-wide"
+            style={{ fontFamily: "'ZCOOL KuaiLe', sans-serif", color: '#C4956A' }}
+          >
             编辑记忆
           </h3>
           <button
@@ -183,4 +204,8 @@ export function RecordEditDialog({ record, onClose, onSaved }: RecordEditDialogP
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+
+  return createPortal(dialog, document.body);
 }
